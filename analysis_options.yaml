@@ -1,0 +1,26 @@
+# Shared strict analysis for the whole Forge workspace.
+# Each package shims to this file via `include: ../../analysis_options.yaml`.
+
+include: package:lints/recommended.yaml
+
+analyzer:
+  exclude:
+    - build/**
+  language:
+    strict-casts: true
+    strict-inference: true
+    strict-raw-types: true
+
+linter:
+  rules:
+    # Public API discipline: every exported symbol is documented, and nothing
+    # exported reaches for a type that is not.
+    - public_member_api_docs
+
+    # Always spell out what a member returns.
+    - always_declare_return_types
+
+    # Documentation hygiene.
+    - directives_ordering
+    - eol_at_end_of_file
+    - unnecessary_library_name

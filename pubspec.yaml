@@ -1,0 +1,39 @@
+name: the_forge_ecosystem
+description: Monorepo workspace root for the Forge ecosystem (fetch + SQLite packages).
+publish_to: none
+repository: https://github.com/albetnov/the_forge_ecosystem
+
+environment:
+  sdk: ^3.13.4
+
+workspace:
+  - packages/fetch_forge
+  - packages/sqlite_schema_forge
+  - packages/sqlite_query_forge
+  - packages/sqlite3_driver_forge
+
+dev_dependencies:
+  lints: ^6.0.0
+  melos: ^8.9.0
+
+melos:
+  command:
+    version:
+      branch: main
+      message: "chore(release): publish packages"
+  scripts:
+    analyze:
+      run: melos exec -- "dart analyze --fatal-warnings"
+      description: Analyze all packages. Infos (e.g. public_member_api_docs backfill in sqlite_*) don't fail; warnings and errors do.
+
+    test:
+      run: melos exec --scope="sqlite_*" -- "dart test" && melos exec --scope="fetch_forge" -- "flutter test"
+      description: dart test for sqlite_* packages, flutter test for fetch_forge.
+
+    format:
+      run: dart format .
+      description: Format the whole workspace.
+
+    publish:dry:
+      run: melos exec -- "dart pub publish --dry-run"
+      description: Dry-run publish check for every package. Never publishes for real.

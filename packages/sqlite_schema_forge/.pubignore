@@ -1,0 +1,3 @@
+# Build outputs and Melos-generated IDE files; never published.
+build/
+*.iml

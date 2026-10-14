@@ -1,0 +1,25 @@
+name: sqlite_query_forge
+description: >-
+  A zero-cost, declarative SQLite query builder for Dart. Columns are const
+  classes, expressions are a sealed hierarchy, and every runtime value is bound
+  as a parameter rather than inlined into SQL.
+version: 0.1.0
+repository: https://github.com/albetnov/the_forge_ecosystem/tree/main/packages/sqlite_query_forge
+homepage: https://github.com/albetnov/the_forge_ecosystem
+issue_tracker: https://github.com/albetnov/the_forge_ecosystem/issues
+
+environment:
+  sdk: ^3.13.4
+
+resolution: workspace
+
+dependencies:
+  sqlite_schema_forge: ^0.1.0
+
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.25.6
+
+topics:
+  - sqlite
+  - query-builder

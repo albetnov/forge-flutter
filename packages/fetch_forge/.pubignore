@@ -1,0 +1,10 @@
+# Local tooling state, not part of the published package.
+skills-lock.json
+.agents/
+
+# The agent brief for this package; never published.
+PLAN.md
+
+# Build outputs and Melos-generated IDE files; never published.
+build/
+*.iml

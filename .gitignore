@@ -1,0 +1,31 @@
+# https://dart.dev/tools/private-files
+.dart_tool/
+.build/
+build/
+
+# Library packages must not commit their lockfiles, but the workspace root
+# lockfile SHOULD be committed (Melos + Pub workspaces need it reproducible).
+# `pubspec.lock` matches at any depth; `!/pubspec.lock` un-ignores the root one.
+pubspec.lock
+!/pubspec.lock
+
+# Flutter artifacts (example/app + fetch_forge widget tests).
+.flutter-plugins
+.flutter-plugins-dependencies
+.localizations/
+flutter_*.png
+
+# Coverage.
+coverage/
+lcov.info
+
+# Pub overrides (Melos-managed + local).
+pubspec_overrides.yaml
+
+# OS / editor.
+.DS_Store
+*.iml
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json

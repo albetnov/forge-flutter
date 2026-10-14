@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "skills": {
+    "increase-coverage": {
+      "source": "rodydavis/signals.dart",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/increase-coverage/SKILL.md",
+      "computedHash": "5a3383ff45738e7b4efe85820d82394e4ad4113ad3be46cb5315f9dbae2c4b5b"
+    },
+    "signals-dart": {
+      "source": "rodydavis/signals.dart",
+      "sourceType": "github",
+      "skillPath": "skills/signals-dart/SKILL.md",
+      "computedHash": "48a655c59acad45b30f520e66f5f0cb5056e1b16b39b3be9553b73d402491943"
+    },
+    "signals-flutter": {
+      "source": "rodydavis/signals.dart",
+      "sourceType": "github",
+      "skillPath": "skills/signals-flutter/SKILL.md",
+      "computedHash": "dd242d260f773e5f9aed495bf713a65228328c439f69a318a3bb699db256ab73"
+    },
+    "signals-lint": {
+      "source": "rodydavis/signals.dart",
+      "sourceType": "github",
+      "skillPath": "skills/signals-lint/SKILL.md",
+      "computedHash": "55b1fe9b695be019eb5a3e07eb488adb6448d0de5eb790a3861ba086fb5bc001"
+    },
+    "signals-preact-dart": {
+      "source": "rodydavis/signals.dart",
+      "sourceType": "github",
+      "skillPath": "skills/signals-preact-dart/SKILL.md",
+      "computedHash": "2c5ac56b16b9dcb4685db82f784077543c924769dbe8d7319318276684050fb7"
+    }
+  }
+}

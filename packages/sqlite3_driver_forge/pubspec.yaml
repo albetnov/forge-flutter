@@ -1,0 +1,29 @@
+name: sqlite3_driver_forge
+description: >-
+  Background-isolate driver over package:sqlite3 for the forge packages.
+  Owns the connection lifecycle, serializes access, and implements both
+  ForgeExecutor (sqlite_query_forge) and DatabaseExecutor
+  (sqlite_schema_forge), with first-class SQLCipher support.
+version: 0.1.0
+repository: https://github.com/albetnov/the_forge_ecosystem/tree/main/packages/sqlite3_driver_forge
+homepage: https://github.com/albetnov/the_forge_ecosystem
+issue_tracker: https://github.com/albetnov/the_forge_ecosystem/issues
+
+environment:
+  sdk: ^3.13.4
+
+resolution: workspace
+
+dependencies:
+  sqlite3: ^3.7.1
+  sqlite_query_forge: ^0.1.0
+  sqlite_schema_forge: ^0.1.0
+
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.25.6
+
+topics:
+  - sqlite
+  - driver
+  - isolate
