@@ -7,10 +7,6 @@ callback you have to remember to unregister. Everything a query exposes — its
 status, its data, its last error — is readable with `.value`, and everything it
 does — refetch, invalidate, seed — is a method that writes to those signals.
 
-**Status:** `0.4.0` ships `Query` and `Mutation` alongside the
-primitives, plus the Flutter layer. Everything on this page is
-tested; nothing here is aspirational.
-
 ## Hello world
 
 ```dart
@@ -54,7 +50,7 @@ From pub.dev:
 
 ```yaml
 dependencies:
-  fetch_forge: ^0.4.0
+  fetch_forge: ^0.1.0
   signals: ^7.0.0
 ```
 
