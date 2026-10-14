@@ -1,0 +1,585 @@
+---
+// fetch_forge quick-start guide. Read mode inside the timetable world:
+// world owns the frame (band, TOC, code/table setting), column stays calm.
+// All prose and code derived from packages/fetch_forge/README.md.
+function highlight(src) {
+  const esc = src.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const re = /(\/\/[^\n]*|#[^\n]*)|('(?:[^'\\\n]|\\.)*')|\b(final|const|var|late|class|extends|import|return|await|async|if|else|new|this|super|is|in|as|get|static|factory)\b/g;
+  return esc.replace(re, (m, com, str, kw) => {
+    if (com) return `<span class="tok-c">${com}</span>`;
+    if (str) return `<span class="tok-s">${str}</span>`;
+    if (kw) return `<span class="tok-k">${kw}</span>`;
+    return m;
+  });
+}
+const installYaml = `dependencies:
+  fetch_forge: ^0.1.0
+  signals: ^7.0.0`;
+const installPath = `dependencies:
+  fetch_forge:
+    path: ../fetch_forge`;
+const cliCmd = `dart run --enable-asserts example/cli/bin/fetch_forge.dart`;
+const queryHello = `Future<List<String>> fetchUsers(int page) async => ['ada', 'grace', 'alan'];
+
+final users = Query<List<String>, int>(
+  fetcher: fetchUsers,
+  staleTime: const Duration(seconds: 30),
+);
+final page = signal(1);
+
+// One line wires the variables signal to the fetch.
+users.bind(page);
+await Future<void>.delayed(Duration.zero);
+print(users.snapshot.value);
+
+page.value = 2; // New variables, new fetch, same binding.
+users.dispose(); // The binding and the signals, together.`;
+const querySignals = `final query = Query<List<String>, int>(fetcher: fetchUsers);
+final page = signal(1);
+
+query.bind(page); // The variables signal drives the fetch. One call, owned.
+
+// Derived state, same as for any other signal.
+final names = computed(() => switch (query.snapshot.value) {
+      AsyncValueData(:final value) => value,
+      _ => const <String>[],
+    });
+
+// An effect that re-runs on every change, with no widget in sight.
+page.value = 2; // New variables, new fetch, same binding.
+query.dispose();`;
+const queryVars = `final users = Query<List<String>, ({int page, String tag})>(
+  fetcher: (variables) => api.users(variables.page, variables.tag),
+);
+
+// A record has structural equality out of the box.
+await users.watch((page: 1, tag: 'newest'));`;
+const queryCacheKey = `final filtered = Query<Page, Filter>(
+  fetcher: (filter) => api.page(filter.page),
+  cacheKey: (filter) => filter.page, // 'nonce' no longer forks the cache
+);`;
+const queryClient = `final client = QueryClient();
+final users = Query<List<String>, int>(fetcher: fetchUsers, client: client);
+
+await users.watch(1); // every query on this client sharing key 1 shares one fetch`;
+const mutBasic = `final createUser = Mutation<String, String>(
+  mutator: (name) async => name,
+  cacheDuration: const Duration(minutes: 5),
+);
+
+// Fire and forget: the failure lands on 'error', it never throws here.
+createUser.mutate('ada').ignore();
+
+// Await the value instead: this one rethrows, like calling the API directly.
+final user = await createUser.mutateAsync('ada');`;
+const mutLoop = `final client = QueryClient();
+final users = Query<List<String>, int>(fetcher: fetchUsers, client: client);
+final createUser = Mutation<String, int>(
+  mutator: (page) async => 'grace',
+  client: client,
+  cacheDuration: const Duration(minutes: 5),
+);
+
+await users.watch(1);
+await createUser.mutate(1); // the new user is in the cache now
+createUser.invalidateCache(1); // ...and the list refetches it`;
+const fqBuilder = `final page = signal(1);
+
+QueryScope(
+  client: client,
+  child: QueryBuilder<List<String>, int>(
+    fetcher: fetchUsers,
+    variables: page,
+    staleTime: const Duration(seconds: 30),
+    builder: (context, snapshot) => switch (snapshot) {
+      AsyncValueData(:final value) => Text(value.join(', ')),
+      AsyncValueLoading() => const Text('Loading...'),
+      AsyncValueError(:final error) => Text('Failed: $error'),
+      AsyncValueIdle() => const Text('Idle'),
+    },
+  ),
+);`;
+const demoCmd = `cd example/app && flutter run -d chrome`;
+const recipeOpt = `final page = signal(1);
+query.setData([...query.data.value ?? const [], newUser], page.value);
+
+// If the write fails, roll back by seeding again with the previous value.`;
+const recipeInv = `final client = QueryClient();
+final users = Query<List<String>, int>(fetcher: fetchUsers, client: client);
+final createUser = Mutation<String, int>(
+  mutator: (page) async => 'grace',
+  client: client,
+);
+
+void onUserCreated(int page) {
+  createUser.invalidateCache(page);
+}`;
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <meta
+      name="description"
+      content="fetch_forge quick-start guide: Query and QueryClient, Mutation, and Flutter widgets."
+    />
+    <title>fetch_forge quick start: The Forge Ecosystem</title>
+    <style is:global>
+      :root {
+        --paper: #fbfaf6;
+        --paper-deep: #f3efe4;
+        --ink: #16202c;
+        --ink-soft: #43536a;
+        --rule: #e0d9c6;
+        --board: #141c28;
+        --board-rule: #2a3547;
+        --board-ink: #f2efe6;
+        --board-soft: #b9c2d0;
+        --red: #b3271e;
+        --red-bright: #ff8a7a;
+        --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas,
+          "Liberation Mono", monospace;
+        --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+      }
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink);
+        font-family: var(--sans);
+        font-size: 1.0625rem;
+        line-height: 1.65;
+      }
+      ::selection { background: var(--red); color: #fff; }
+      :focus-visible {
+        outline: 2px solid var(--red);
+        outline-offset: 3px;
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar { width: 12px; }
+      ::-webkit-scrollbar-track { background: var(--paper-deep); }
+      ::-webkit-scrollbar-thumb {
+        background: var(--ink-soft);
+        border-radius: 8px;
+        border: 3px solid var(--paper-deep);
+      }
+      .wrap { max-width: 72rem; margin: 0 auto; padding: 0 1.5rem; }
+      .masthead {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 0.5rem 1rem;
+        padding: 1.25rem 0 0.75rem;
+        border-bottom: 2px solid var(--ink);
+      }
+      .wordmark {
+        margin: 0;
+        font-size: 1rem;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        font-weight: 800;
+      }
+      .wordmark a { color: inherit; text-decoration: none; }
+      .wordmark .rule-red { color: var(--red); }
+      .masthead nav { display: flex; flex-wrap: wrap; gap: 1rem; font-size: 0.9375rem; }
+      .masthead nav a { color: var(--ink-soft); text-underline-offset: 4px; }
+      .masthead nav a:hover { color: var(--red); }
+      .masthead nav a[aria-current="page"] { color: var(--ink); font-weight: 700; }
+      .band {
+        background: var(--board);
+        color: var(--board-ink);
+        border-radius: 14px;
+        margin: 1.75rem 0 0;
+        padding: 2rem clamp(1.25rem, 4vw, 2.5rem);
+        box-shadow: 10px 14px 28px rgba(20, 28, 40, 0.28);
+      }
+      .band h1 {
+        margin: 0;
+        font-size: clamp(2rem, 5vw, 3.25rem);
+        line-height: 1.1;
+        letter-spacing: -0.025em;
+        font-weight: 800;
+        text-wrap: balance;
+      }
+      .band h1 .t-red { color: var(--red-bright); }
+      .band .lede { margin: 0.9rem 0 0; color: var(--board-soft); max-width: 68ch; }
+      .band .meta { display: flex; flex-wrap: wrap; gap: 0.625rem; margin-top: 1.25rem; }
+      .band .meta a, .band .meta span.ver {
+        font-family: var(--mono);
+        font-size: 0.8125rem;
+        color: var(--board-ink);
+        border: 1px solid var(--board-rule);
+        border-radius: 999px;
+        padding: 0.45rem 1.1rem;
+        text-decoration: none;
+        font-variant-numeric: tabular-nums;
+      }
+      .band .meta a:hover { border-color: var(--red-bright); color: #fff; }
+      .band .meta span.ver { color: var(--red-bright); }
+      .toc {
+        list-style: none;
+        margin: 2.5rem 0 0;
+        padding: 0;
+        border-top: 2px solid var(--ink);
+      }
+      .toc li { border-bottom: 1px solid var(--rule); }
+      .toc a {
+        display: flex;
+        gap: 1rem;
+        align-items: baseline;
+        padding: 0.7rem 0.25rem;
+        color: var(--ink);
+        text-decoration: none;
+      }
+      .toc a:hover { color: var(--red); }
+      .toc .stop {
+        font-family: var(--mono);
+        font-size: 0.8125rem;
+        color: var(--red);
+        font-weight: 700;
+        min-width: 2.5rem;
+      }
+      .prose > p, .prose > ul, .prose > ol { max-width: 70ch; }
+      .prose section.block { padding: 3rem 0 0; }
+      .prose h2 {
+        margin: 0 0 0.5rem;
+        font-size: clamp(1.5rem, 3vw, 2rem);
+        letter-spacing: -0.02em;
+        line-height: 1.2;
+        text-wrap: balance;
+      }
+      .prose h3 {
+        margin: 2rem 0 0.5rem;
+        font-size: 1rem;
+        letter-spacing: -0.01em;
+      }
+      .prose p { margin: 0 0 1rem; }
+      .prose code.inline {
+        font-family: var(--mono);
+        font-size: 0.875em;
+        background: var(--paper-deep);
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        padding: 0.1em 0.35em;
+      }
+      figure.code {
+        margin: 1.25rem 0;
+        border: 1px solid var(--rule);
+        border-radius: 12px;
+        background: #fff;
+        box-shadow: 8px 12px 24px rgba(22, 32, 44, 0.1);
+        overflow: hidden;
+      }
+      figure.code figcaption {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.65rem 1rem;
+        border-bottom: 1px solid var(--rule);
+        font-family: var(--mono);
+        font-size: 0.8125rem;
+        color: var(--ink-soft);
+      }
+      .copy {
+        font-family: var(--mono);
+        font-size: 0.75rem;
+        background: transparent;
+        border: 1px solid var(--rule);
+        border-radius: 999px;
+        padding: 0.3rem 0.8rem;
+        cursor: pointer;
+        color: var(--ink);
+      }
+      .copy:hover { border-color: var(--ink); }
+      figure.code pre {
+        margin: 0;
+        padding: 1.1rem 1.2rem 1.3rem;
+        overflow-x: auto;
+        font-family: var(--mono);
+        font-size: 0.8125rem;
+        line-height: 1.65;
+      }
+      figure.code pre code { font-variant-numeric: tabular-nums; }
+      .tok-k { color: var(--ink); font-weight: 700; }
+      .tok-s { color: #8f1f18; }
+      .tok-c { color: var(--ink-soft); font-style: italic; }
+      .note {
+        border: 1px solid var(--rule);
+        border-radius: 12px;
+        background: #fff;
+        padding: 1rem 1.25rem;
+        margin: 1.25rem 0;
+        max-width: 70ch;
+      }
+      .note p { margin: 0; font-size: 0.9375rem; }
+      .note .lead { font-family: var(--mono); font-weight: 700; color: var(--red); }
+      table.scope {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 1.25rem 0;
+        font-size: 0.9375rem;
+        background: #fff;
+        border: 1px solid var(--rule);
+        border-radius: 12px;
+        overflow: hidden;
+      }
+      table.scope th, table.scope td {
+        text-align: left;
+        padding: 0.7rem 1rem;
+        border-bottom: 1px solid var(--rule);
+        vertical-align: top;
+      }
+      table.scope tr:last-child th, table.scope tr:last-child td { border-bottom: 0; }
+      table.scope th { font-family: var(--mono); font-size: 0.8125rem; font-weight: 400; white-space: nowrap; }
+      .onward {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem 1.5rem;
+        justify-content: space-between;
+        margin-top: 3rem;
+        border-top: 2px solid var(--ink);
+        padding: 1.25rem 0 0;
+      }
+      .onward a { color: var(--ink); text-underline-offset: 4px; font-weight: 700; }
+      .onward a:hover { color: var(--red); }
+      .onward .next { font-weight: 400; color: var(--ink-soft); }
+      footer {
+        margin-top: 2.5rem;
+        border-top: 2px solid var(--ink);
+        padding: 1.5rem 0 2.5rem;
+        color: var(--ink-soft);
+        font-size: 0.875rem;
+      }
+      footer .wrap { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; justify-content: space-between; }
+      footer a { color: var(--ink); text-underline-offset: 4px; }
+      footer a:hover { color: var(--red); }
+      @media (prefers-reduced-motion: reduce) {
+        html { scroll-behavior: auto; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="masthead">
+        <p class="wordmark"><a href="/">The Forge <span class="rule-red">/</span> Ecosystem</a></p>
+        <nav aria-label="Primary">
+          <a href="/#departures">Departures</a>
+          <a href="/guides/">Guides</a>
+          <a href="https://github.com/albetnov/the_forge_ecosystem">GitHub</a>
+        </nav>
+      </div>
+    </div>
+
+    <div class="wrap">
+      <div class="band">
+        <h1>fetch_forge <span class="t-red">quick start</span></h1>
+        <p class="lede">
+          Cached, retryable, reactive remote data on top of signals. This guide
+          covers reads with Query and QueryClient, one-shot writes with
+          Mutation, and the Flutter widgets, then two day-one recipes and an
+          honest list of what the package leaves out.
+        </p>
+        <div class="meta">
+          <span class="ver">0.1.0</span>
+          <a href="https://pub.dev/packages/fetch_forge">pub.dev</a>
+          <a href="https://github.com/albetnov/the_forge_ecosystem/tree/main/packages/fetch_forge">README source</a>
+        </div>
+      </div>
+
+      <ol class="toc" aria-label="Stops on this line">
+        <li><a href="#install"><span class="stop">S1</span>Install the line</a></li>
+        <li><a href="#query"><span class="stop">S2</span>Reads: Query and QueryClient</a></li>
+        <li><a href="#mutation"><span class="stop">S3</span>Writes: Mutation</a></li>
+        <li><a href="#flutter"><span class="stop">S4</span>In Flutter widgets</a></li>
+        <li><a href="#recipes"><span class="stop">S5</span>Two day-one recipes</a></li>
+        <li><a href="#scope"><span class="stop">S6</span>What is not included</a></li>
+      </ol>
+
+      <div class="prose">
+        <section class="block" id="install" aria-labelledby="install-h">
+          <h2 id="install-h">Install the line</h2>
+          <p>
+            From pub.dev, with <code class="inline">signals</code> alongside:
+            a query's state <em>is</em> signal state, so the dependency is
+            structural, not incidental:
+          </p>
+          <figure class="code">
+            <figcaption><span>pubspec.yaml</span><button class="copy" data-copy="code-install">Copy</button></figcaption>
+            <pre><code id="code-install" set:html={highlight(installYaml)} /></pre>
+          </figure>
+          <p>Working from this monorepo instead, point at the path:</p>
+          <figure class="code">
+            <figcaption><span>pubspec.yaml, monorepo checkout</span><button class="copy" data-copy="code-install-path">Copy</button></figcaption>
+            <pre><code id="code-install-path" set:html={highlight(installPath)} /></pre>
+          </figure>
+          <p>Run the full walkthrough from the package itself:</p>
+          <figure class="code">
+            <figcaption><span>cli walkthrough</span><button class="copy" data-copy="code-cli">Copy</button></figcaption>
+            <pre><code id="code-cli" set:html={highlight(cliCmd)} /></pre>
+          </figure>
+          <div class="note">
+            <p><span class="lead">Note:</span> <code class="inline">--enable-asserts</code> turns on the cache-key guard, a debug-only check by design. Flutter debug builds already have assertions on.</p>
+          </div>
+        </section>
+
+        <section class="block" id="query" aria-labelledby="query-h">
+          <h2 id="query-h">Reads: Query and QueryClient</h2>
+          <p>
+            A <code class="inline">Query</code> turns a <code class="inline">V → Future&lt;T&gt;</code> fetcher into a value that lives in the reactive graph. Everything it exposes (status, data, last error) reads through <code class="inline">.value</code>; everything it does (refetch, invalidate, seed) is a method that writes to those signals.
+          </p>
+          <figure class="code">
+            <figcaption><span>hello world</span><button class="copy" data-copy="code-hello">Copy</button></figcaption>
+            <pre><code id="code-hello" set:html={highlight(queryHello)} /></pre>
+          </figure>
+          <h3>Bind once, derive freely</h3>
+          <p>
+            <code class="inline">bind(variables)</code> is the effect you would otherwise write by hand, with one difference: the query owns it. <code class="inline">dispose()</code> releases the binding and the signals together, and every field stays a <code class="inline">ReadonlySignal</code>. As a result, <code class="inline">computed</code> and <code class="inline">effect</code> compose with a query the way they compose with <code class="inline">int</code>.
+          </p>
+          <figure class="code">
+            <figcaption><span>signals are the API</span><button class="copy" data-copy="code-signals">Copy</button></figcaption>
+            <pre><code id="code-signals" set:html={highlight(querySignals)} /></pre>
+          </figure>
+          <h3>Variables are the cache key</h3>
+          <p>
+            Two variables are the same request when they are <code class="inline">==</code>. Records work out of the box; a class must override <code class="inline">==</code> and <code class="inline">hashCode</code>.
+          </p>
+          <figure class="code">
+            <figcaption><span>value-type variables</span><button class="copy" data-copy="code-vars">Copy</button></figcaption>
+            <pre><code id="code-vars" set:html={highlight(queryVars)} /></pre>
+          </figure>
+          <div class="note">
+            <p><span class="lead">Footgun:</span> a <code class="inline">List</code>, <code class="inline">Map</code>, or <code class="inline">Set</code> compares by identity, so equal contents never match in the cache. The query refuses them in debug builds with a <code class="inline">CacheKeyError</code> that names the fix: pass a record, a value type, or map the variables with <code class="inline">cacheKey</code>.</p>
+          </div>
+          <figure class="code">
+            <figcaption><span>mapping the key</span><button class="copy" data-copy="code-cachekey">Copy</button></figcaption>
+            <pre><code id="code-cachekey" set:html={highlight(queryCacheKey)} /></pre>
+          </figure>
+          <h3>Share a client</h3>
+          <p>
+            A <code class="inline">QueryClient</code> is an optional shared cache keyed by query variables. Give queries the same client and the same key mapper and they find each other's entries. Concurrent fetches for one page deduplicate instead of doubling.
+          </p>
+          <figure class="code">
+            <figcaption><span>one fetch per key</span><button class="copy" data-copy="code-client">Copy</button></figcaption>
+            <pre><code id="code-client" set:html={highlight(queryClient)} /></pre>
+          </figure>
+        </section>
+
+        <section class="block" id="mutation" aria-labelledby="mutation-h">
+          <h2 id="mutation-h">Writes: Mutation</h2>
+          <p>
+            A mutation is a one-shot write with the same signal shape as a query (status, data, error), but it never fetches on its own, is never deduplicated, and speaks <code class="inline">pending</code> instead of <code class="inline">loading</code>. There is intentionally no snapshot: a write has no staleness, so branching on pending, success, and error is the whole UI.
+          </p>
+          <figure class="code">
+            <figcaption><span>fire, or await</span><button class="copy" data-copy="code-mut">Copy</button></figcaption>
+            <pre><code id="code-mut" set:html={highlight(mutBasic)} /></pre>
+          </figure>
+          <p>
+            <code class="inline">mutate</code> never throws: failure lands on <code class="inline">error</code>. <code class="inline">mutateAsync</code> rethrows, like calling the API directly. Pass a <code class="inline">cacheDuration</code> and successful results are written to the client under the variables' key, where a query reading the same key finds them without fetching. That closes the write-then-refetch loop with the mutation knowing nothing about queries:
+          </p>
+          <figure class="code">
+            <figcaption><span>write, then refetch</span><button class="copy" data-copy="code-mutloop">Copy</button></figcaption>
+            <pre><code id="code-mutloop" set:html={highlight(mutLoop)} /></pre>
+          </figure>
+        </section>
+
+        <section class="block" id="flutter" aria-labelledby="flutter-h">
+          <h2 id="flutter-h">In Flutter widgets</h2>
+          <p>
+            The Flutter entrypoint (<code class="inline">package:fetch_forge/flutter.dart</code>) re-exports everything above and adds two widgets. <code class="inline">QueryBuilder</code> owns a query, binds it to a variables signal, and rebuilds from its snapshot; <code class="inline">QueryScope</code> shares one client with a subtree, so two builders watching the same variables share one fetch and settle together.
+          </p>
+          <figure class="code">
+            <figcaption><span>builder and scope</span><button class="copy" data-copy="code-fq">Copy</button></figcaption>
+            <pre><code id="code-fq" set:html={highlight(fqBuilder)} /></pre>
+          </figure>
+          <p>
+            A <code class="inline">refresh</code> signal forces a refetch of the current variables when bumped. When the widget's arguments change, the old query no longer describes the request, so the state disposes it and builds a new one; unmount disposes bindings and query together. The layer stays thin: nothing here you could not write with <code class="inline">Query</code>, <code class="inline">bind</code>, and <code class="inline">SignalBuilder</code> in about twenty lines, and the core never imports Flutter.
+          </p>
+          <figure class="code">
+            <figcaption><span>run the demo app</span><button class="copy" data-copy="code-demo">Copy</button></figcaption>
+            <pre><code id="code-demo" set:html={highlight(demoCmd)} /></pre>
+          </figure>
+        </section>
+
+        <section class="block" id="recipes" aria-labelledby="recipes-h">
+          <h2 id="recipes-h">Two day-one recipes</h2>
+          <p>
+            The README collects four things people ask for on day one, none needing library support. Two sampled here; the polling and resume timers follow the same shape: a signal you own plus <code class="inline">refetch</code>.
+          </p>
+          <h3>Optimistic update</h3>
+          <p>Seed the cache, then let the write fall where it may. If it fails, roll back by seeding again with the previous value.</p>
+          <figure class="code">
+            <figcaption><span>seed first, reconcile after</span><button class="copy" data-copy="code-opt">Copy</button></figcaption>
+            <pre><code id="code-opt" set:html={highlight(recipeOpt)} /></pre>
+          </figure>
+          <h3>Invalidate and refetch after a write</h3>
+          <p>The mutation remembers the keys it wrote, so invalidating them is one call, and every query watching one refetches through the shared client.</p>
+          <figure class="code">
+            <figcaption><span>one call, every watcher refetches</span><button class="copy" data-copy="code-inv">Copy</button></figcaption>
+            <pre><code id="code-inv" set:html={highlight(recipeInv)} /></pre>
+          </figure>
+        </section>
+
+        <section class="block" id="scope" aria-labelledby="scope-h">
+          <h2 id="scope-h">What is not included</h2>
+          <p>
+            Each omission below is a deliberate line: the thing it replaces is a few lines of your code, and a library version would be hidden policy.
+          </p>
+          <table class="scope">
+            <tbody>
+              <tr><th scope="row">Background polling</th><td>A timer you own plus <code class="inline">refetch</code> is three lines; a library timer is policy.</td></tr>
+              <tr><th scope="row">Refetch on resume, focus, reconnect</th><td>All three are a signal bump plus one effect, which is why the core has no lifecycle listener to get wrong.</td></tr>
+              <tr><th scope="row">Tag-based invalidation</th><td>A version signal plus <code class="inline">invalidate</code> covers it, without a tag registry in the core.</td></tr>
+              <tr><th scope="row">Persistence, offline queues, cancellation</th><td>A storage engine, a retry queue, or an abort signal bolted on; none belongs behind value equality.</td></tr>
+              <tr><th scope="row">Suspense bridges</th><td><code class="inline">AsyncValue</code> is a plain value, so a bridge to Riverpod or Bloc is a ten-line adapter you should own.</td></tr>
+              <tr><th scope="row">Automatic cache GC</th><td>Timers are policy. Expiry is checked on read; <code class="inline">clear</code> reclaims memory on demand.</td></tr>
+              <tr><th scope="row">GraphQL, codegen, schemas</th><td>Out of scope by design; the fetcher is any <code class="inline">V → Future&lt;T&gt;</code>.</td></tr>
+            </tbody>
+          </table>
+          <div class="note">
+            <p><span class="lead">Rule of thumb, from the README:</span> if something cannot be built from the public API in under twenty lines, file an issue: that is a gap in the API, not a feature to add quietly.</p>
+          </div>
+        </section>
+      </div>
+
+      <div class="onward">
+        <a href="/guides/">← All guides</a>
+        <a href="/guides/sqlite-schema-forge">Next: sqlite_schema_forge guide →</a>
+      </div>
+    </div>
+
+    <footer>
+      <div class="wrap">
+        <span>This guide paraphrases nothing: prose and code derive from the fetch_forge README, which stays authoritative.</span>
+        <span><a href="https://github.com/albetnov/the_forge_ecosystem">Monorepo</a> · <a href="https://github.com/albetnov/the_forge_ecosystem/blob/main/LICENSE">MIT</a> · <a href="https://pub.dev/packages/fetch_forge">pub.dev</a></span>
+      </div>
+    </footer>
+
+    <script>
+      document.querySelectorAll(".copy").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const el = document.getElementById(btn.dataset.copy);
+          const done = () => {
+            btn.textContent = "Copied";
+            setTimeout(() => (btn.textContent = "Copy"), 1600);
+          };
+          try {
+            await navigator.clipboard.writeText(el.textContent);
+            done();
+          } catch {
+            const r = document.createRange();
+            r.selectNodeContents(el);
+            const s = getSelection();
+            s.removeAllRanges();
+            s.addRange(r);
+            done();
+          }
+        });
+      });
+    </script>
+  </body>
+</html>

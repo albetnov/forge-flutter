@@ -1,0 +1,520 @@
+---
+// sqlite_schema_forge quick-start guide. Same Read frame as the fetch guide.
+// All prose and code derived from packages/sqlite_schema_forge/README.md.
+function highlight(src) {
+  const esc = src.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const re = /(\/\/[^\n]*|#[^\n]*)|('(?:[^'\\\n]|\\.)*')|\b(final|const|var|late|class|extends|import|return|await|async|if|else|new|this|super|is|in|as|get|static|factory)\b/g;
+  return esc.replace(re, (m, com, str, kw) => {
+    if (com) return `<span class="tok-c">${com}</span>`;
+    if (str) return `<span class="tok-s">${str}</span>`;
+    if (kw) return `<span class="tok-k">${kw}</span>`;
+    return m;
+  });
+}
+const installCmd = `dart pub add sqlite_schema_forge`;
+const declareSnippet = `final appSchema = Schema(
+  version: 1,
+  tables: [
+    Table(
+      'wallets',
+      [
+        Column.id(),
+        Column.text('name', nullable: false),
+        Column.integer('wallet_type_id', nullable: false),
+        Column.datetime('created_at',
+            defaultValue: RawSql.currentTimestamp),
+      ],
+      indexes: [
+        Index(columns: ['wallet_type_id']),
+      ],
+    ),
+  ],
+);`;
+const migrateSnippet = `void main() async {
+  final db = MyDatabaseDriver(); // Wraps sqflite, sqlite3, or FFI
+
+  await SqliteSchemaForge.enableForeignKeys(db);
+
+  final result = await SqliteSchemaForge.migrate(
+    db: db,
+    targetSchema: appSchema,
+  );
+
+  print('Migrated: \${result.migrated}');
+  print('Executed SQL:\\n\${result.executedSql.join('\\n')}');
+}`;
+const upgradeSnippet = `final result = await SqliteSchemaForge.migrate(
+  db: db,
+  targetSchema: appSchemaV2,
+  allowDestructive: true, // Required for column removals or type modifications
+  onUpgrade: (db, from, to) async {
+    if (from == 1 && to >= 2) {
+      // Phase 1: Transform existing data before structural table rebuild
+      await db.execute("UPDATE users SET age = 0 WHERE age IS NULL;");
+    }
+  },
+);`;
+const planSnippet = `final MigrationPlan plan = await SqliteSchemaForge.plan(
+  db: db,
+  targetSchema: appSchema,
+);
+
+if (plan.hasDestructiveChanges) {
+  print('Warning: Migration requires table rebuilds!');
+}
+
+for (final step in plan.steps) {
+  print('[\${step.type.name}] \${step.description}');
+  print('SQL: \${step.sql}\\n');
+}`;
+const applySnippet = `final plan = await SqliteSchemaForge.plan(db: db, targetSchema: appSchema);
+
+// Executes structural updates without touching PRAGMA user_version
+await SqliteSchemaForge.applyPlan(
+  db: db,
+  plan: plan,
+  allowDestructive: true,
+);`;
+const fkSnippet = `Column.integer(
+  'wallet_type_id',
+  nullable: false,
+  refTable: 'wallet_types',
+  refCol: 'id',
+);`;
+const ftsSnippet = `final transactionsFts = VirtualTable.fts5(
+  'transactions_fts',
+  columns: ['name', 'note'],
+  contentTable: 'transactions', // Binds FTS index directly to content table
+  contentRowId: 'id',
+);`;
+const triggerSnippet = `// Option A: FTS Sync Preset (Zero-boilerplate)
+final ftsInsertTrigger = Trigger.ftsSync(
+  name: 'transactions_fts_insert',
+  targetTable: 'transactions',
+  ftsTable: 'transactions_fts',
+  columns: ['name', 'note'],
+);
+
+// Option B: Custom Trigger Object
+final updateTimestampTrigger = Trigger(
+  name: 'update_wallet_timestamp',
+  timing: TriggerTiming.before,
+  event: TriggerEvent.update,
+  targetTable: 'wallets',
+  body: 'SET updated_at = CURRENT_TIMESTAMP WHERE id = old.id;',
+);`;
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <meta
+      name="description"
+      content="sqlite_schema_forge quick-start guide: declare the schema, migrate with auto-diffing, plan and control migrations, keys, FTS, and triggers."
+    />
+    <title>sqlite_schema_forge quick start: The Forge Ecosystem</title>
+    <style is:global>
+      :root {
+        --paper: #fbfaf6;
+        --paper-deep: #f3efe4;
+        --ink: #16202c;
+        --ink-soft: #43536a;
+        --rule: #e0d9c6;
+        --board: #141c28;
+        --board-rule: #2a3547;
+        --board-ink: #f2efe6;
+        --board-soft: #b9c2d0;
+        --red: #b3271e;
+        --red-bright: #ff8a7a;
+        --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas,
+          "Liberation Mono", monospace;
+        --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+      }
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink);
+        font-family: var(--sans);
+        font-size: 1.0625rem;
+        line-height: 1.65;
+      }
+      ::selection { background: var(--red); color: #fff; }
+      :focus-visible {
+        outline: 2px solid var(--red);
+        outline-offset: 3px;
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar { width: 12px; }
+      ::-webkit-scrollbar-track { background: var(--paper-deep); }
+      ::-webkit-scrollbar-thumb {
+        background: var(--ink-soft);
+        border-radius: 8px;
+        border: 3px solid var(--paper-deep);
+      }
+      .wrap { max-width: 72rem; margin: 0 auto; padding: 0 1.5rem; }
+      .masthead {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 0.5rem 1rem;
+        padding: 1.25rem 0 0.75rem;
+        border-bottom: 2px solid var(--ink);
+      }
+      .wordmark {
+        margin: 0;
+        font-size: 1rem;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        font-weight: 800;
+      }
+      .wordmark a { color: inherit; text-decoration: none; }
+      .wordmark .rule-red { color: var(--red); }
+      .masthead nav { display: flex; flex-wrap: wrap; gap: 1rem; font-size: 0.9375rem; }
+      .masthead nav a { color: var(--ink-soft); text-underline-offset: 4px; }
+      .masthead nav a:hover { color: var(--red); }
+      .band {
+        background: var(--board);
+        color: var(--board-ink);
+        border-radius: 14px;
+        margin: 1.75rem 0 0;
+        padding: 2rem clamp(1.25rem, 4vw, 2.5rem);
+        box-shadow: 10px 14px 28px rgba(20, 28, 40, 0.28);
+      }
+      .band h1 {
+        margin: 0;
+        font-size: clamp(2rem, 5vw, 3.25rem);
+        line-height: 1.1;
+        letter-spacing: -0.025em;
+        font-weight: 800;
+        text-wrap: balance;
+      }
+      .band h1 .t-red { color: var(--red-bright); }
+      .band .lede { margin: 0.9rem 0 0; color: var(--board-soft); max-width: 68ch; }
+      .band .meta { display: flex; flex-wrap: wrap; gap: 0.625rem; margin-top: 1.25rem; }
+      .band .meta a, .band .meta span.ver {
+        font-family: var(--mono);
+        font-size: 0.8125rem;
+        color: var(--board-ink);
+        border: 1px solid var(--board-rule);
+        border-radius: 999px;
+        padding: 0.45rem 1.1rem;
+        text-decoration: none;
+        font-variant-numeric: tabular-nums;
+      }
+      .band .meta a:hover { border-color: var(--red-bright); color: #fff; }
+      .band .meta span.ver { color: var(--red-bright); }
+      .toc {
+        list-style: none;
+        margin: 2.5rem 0 0;
+        padding: 0;
+        border-top: 2px solid var(--ink);
+      }
+      .toc li { border-bottom: 1px solid var(--rule); }
+      .toc a {
+        display: flex;
+        gap: 1rem;
+        align-items: baseline;
+        padding: 0.7rem 0.25rem;
+        color: var(--ink);
+        text-decoration: none;
+      }
+      .toc a:hover { color: var(--red); }
+      .toc .stop {
+        font-family: var(--mono);
+        font-size: 0.8125rem;
+        color: var(--red);
+        font-weight: 700;
+        min-width: 2.5rem;
+      }
+      .prose > p, .prose > ul { max-width: 70ch; }
+      .prose section.block { padding: 3rem 0 0; }
+      .prose h2 {
+        margin: 0 0 0.5rem;
+        font-size: clamp(1.5rem, 3vw, 2rem);
+        letter-spacing: -0.02em;
+        line-height: 1.2;
+        text-wrap: balance;
+      }
+      .prose h3 { margin: 2rem 0 0.5rem; font-size: 1rem; letter-spacing: -0.01em; }
+      .prose p { margin: 0 0 1rem; }
+      .prose li { margin-bottom: 0.4rem; }
+      .prose code.inline {
+        font-family: var(--mono);
+        font-size: 0.875em;
+        background: var(--paper-deep);
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        padding: 0.1em 0.35em;
+      }
+      figure.code {
+        margin: 1.25rem 0;
+        border: 1px solid var(--rule);
+        border-radius: 12px;
+        background: #fff;
+        box-shadow: 8px 12px 24px rgba(22, 32, 44, 0.1);
+        overflow: hidden;
+      }
+      figure.code figcaption {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.65rem 1rem;
+        border-bottom: 1px solid var(--rule);
+        font-family: var(--mono);
+        font-size: 0.8125rem;
+        color: var(--ink-soft);
+      }
+      .copy {
+        font-family: var(--mono);
+        font-size: 0.75rem;
+        background: transparent;
+        border: 1px solid var(--rule);
+        border-radius: 999px;
+        padding: 0.3rem 0.8rem;
+        cursor: pointer;
+        color: var(--ink);
+      }
+      .copy:hover { border-color: var(--ink); }
+      figure.code pre {
+        margin: 0;
+        padding: 1.1rem 1.2rem 1.3rem;
+        overflow-x: auto;
+        font-family: var(--mono);
+        font-size: 0.8125rem;
+        line-height: 1.65;
+      }
+      figure.code pre code { font-variant-numeric: tabular-nums; }
+      .tok-k { color: var(--ink); font-weight: 700; }
+      .tok-s { color: #8f1f18; }
+      .tok-c { color: var(--ink-soft); font-style: italic; }
+      .note {
+        border: 1px solid var(--rule);
+        border-radius: 12px;
+        background: #fff;
+        padding: 1rem 1.25rem;
+        margin: 1.25rem 0;
+        max-width: 70ch;
+      }
+      .note p { margin: 0; font-size: 0.9375rem; }
+      .note .lead { font-family: var(--mono); font-weight: 700; color: var(--red); }
+      table.scope {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 1.25rem 0;
+        font-size: 0.9375rem;
+        background: #fff;
+        border: 1px solid var(--rule);
+        border-radius: 12px;
+        overflow: hidden;
+      }
+      table.scope th, table.scope td {
+        text-align: left;
+        padding: 0.7rem 1rem;
+        border-bottom: 1px solid var(--rule);
+        vertical-align: top;
+      }
+      table.scope tr:last-child th, table.scope tr:last-child td { border-bottom: 0; }
+      table.scope th { font-family: var(--mono); font-size: 0.8125rem; font-weight: 400; white-space: nowrap; }
+      .onward {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem 1.5rem;
+        justify-content: space-between;
+        margin-top: 3rem;
+        border-top: 2px solid var(--ink);
+        padding: 1.25rem 0 0;
+      }
+      .onward a { color: var(--ink); text-underline-offset: 4px; font-weight: 700; }
+      .onward a:hover { color: var(--red); }
+      footer {
+        margin-top: 2.5rem;
+        border-top: 2px solid var(--ink);
+        padding: 1.5rem 0 2.5rem;
+        color: var(--ink-soft);
+        font-size: 0.875rem;
+      }
+      footer .wrap { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; justify-content: space-between; }
+      footer a { color: var(--ink); text-underline-offset: 4px; }
+      footer a:hover { color: var(--red); }
+      @media (prefers-reduced-motion: reduce) {
+        html { scroll-behavior: auto; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="masthead">
+        <p class="wordmark"><a href="/">The Forge <span class="rule-red">/</span> Ecosystem</a></p>
+        <nav aria-label="Primary">
+          <a href="/guides/">Guides</a>
+          <a href="https://github.com/albetnov/the_forge_ecosystem">GitHub</a>
+        </nav>
+      </div>
+    </div>
+
+    <div class="wrap">
+      <div class="band">
+        <h1>sqlite_schema_forge <span class="t-red">quick start</span></h1>
+        <p class="lede">
+          A declarative SQLite schema manager with auto-migration. Declare the
+          desired state in plain Dart objects and let the diffing engine write
+          the transitions: no up and down files, no migration manager, no
+          raw CREATE TABLE strings.
+        </p>
+        <div class="meta">
+          <span class="ver">0.1.0</span>
+          <a href="https://pub.dev/packages/sqlite_schema_forge">pub.dev</a>
+          <a href="https://github.com/albetnov/the_forge_ecosystem/tree/main/packages/sqlite_schema_forge">README source</a>
+        </div>
+      </div>
+
+      <ol class="toc" aria-label="Stops on this line">
+        <li><a href="#install"><span class="stop">S1</span>Install the line</a></li>
+        <li><a href="#declare"><span class="stop">S2</span>Declare the desired state</a></li>
+        <li><a href="#migrate"><span class="stop">S3</span>Migrate, preview, control</a></li>
+        <li><a href="#relate"><span class="stop">S4</span>Keys, search, triggers</a></li>
+              </ol>
+
+      <div class="prose">
+        <section class="block" id="install" aria-labelledby="install-h">
+          <h2 id="install-h">Install the line</h2>
+          <p>
+            One dependency. The package is driver agnostic: it runs on any
+            SQLite driver (sqflite, sqlite3, FFI) through the lightweight
+            <code class="inline">DatabaseExecutor</code> contract, and reads
+            <code class="inline">PRAGMA user_version</code> on startup so warm
+            launches cost under a millisecond.
+          </p>
+          <figure class="code">
+            <figcaption><span>terminal</span><button class="copy" data-copy="code-install">Copy</button></figcaption>
+            <pre><code id="code-install" set:html={highlight(installCmd)} /></pre>
+          </figure>
+        </section>
+
+        <section class="block" id="declare" aria-labelledby="declare-h">
+          <h2 id="declare-h">Declare the desired state</h2>
+          <p>
+            Define schemas with plain Dart objects: a versioned
+            <code class="inline">Schema</code> holding <code class="inline">Table</code> entries, each a list of
+            <code class="inline">Column</code> declarations plus indexes. No callback wrappers.
+          </p>
+          <figure class="code">
+            <figcaption><span>desired state, declared</span><button class="copy" data-copy="code-declare">Copy</button></figcaption>
+            <pre><code id="code-declare" set:html={highlight(declareSnippet)} /></pre>
+          </figure>
+          <p>Then point the engine at a live database and migrate to it:</p>
+          <figure class="code">
+            <figcaption><span>migrate to target</span><button class="copy" data-copy="code-migrate">Copy</button></figcaption>
+            <pre><code id="code-migrate" set:html={highlight(migrateSnippet)} /></pre>
+          </figure>
+          <div class="note">
+            <p><span class="lead">Fast-path boot:</span> the engine checks <code class="inline">PRAGMA user_version</code> first. When the live version already matches the target, migration is a sub-millisecond no-op.</p>
+          </div>
+        </section>
+
+        <section class="block" id="migrate" aria-labelledby="migrate-h">
+          <h2 id="migrate-h">Migrate, preview, control</h2>
+          <p>
+            The diffing engine introspects live SQLite <code class="inline">PRAGMA</code> metadata and generates native <code class="inline">ALTER TABLE</code> statements or safe copy-and-swap rebuilds. Manual up and down files do not exist in this model.
+          </p>
+          <h3>Transform data around structure</h3>
+          <p>
+            When a structural change needs data work first (splitting a column, formatting before a type change), <code class="inline">onUpgrade</code> and <code class="inline">onDowngrade</code> run inside the migration. Destructive steps require opting in with <code class="inline">allowDestructive</code>.
+          </p>
+          <figure class="code">
+            <figcaption><span>upgrade with data work</span><button class="copy" data-copy="code-upgrade">Copy</button></figcaption>
+            <pre><code id="code-upgrade" set:html={highlight(upgradeSnippet)} /></pre>
+          </figure>
+          <h3>Preview before committing</h3>
+          <p>
+            <code class="inline">plan()</code> computes the same migration as a dry run: inspect every step and its SQL, and check <code class="inline">hasDestructiveChanges</code> before anything writes.
+          </p>
+          <figure class="code">
+            <figcaption><span>dry run</span><button class="copy" data-copy="code-plan">Copy</button></figcaption>
+            <pre><code id="code-plan" set:html={highlight(planSnippet)} /></pre>
+          </figure>
+          <h3>External version control</h3>
+          <p>
+            If application versioning lives outside SQLite (a multi-storage setup alongside Hive or DataStore, for example), <code class="inline">applyPlan()</code> executes a plan without touching <code class="inline">PRAGMA user_version</code>.
+          </p>
+          <figure class="code">
+            <figcaption><span>versionless apply</span><button class="copy" data-copy="code-apply">Copy</button></figcaption>
+            <pre><code id="code-apply" set:html={highlight(applySnippet)} /></pre>
+          </figure>
+        </section>
+
+        <section class="block" id="relate" aria-labelledby="relate-h">
+          <h2 id="relate-h">Keys, search, triggers</h2>
+          <p>
+            Relationships, full-text search, and triggers all live inside the same declarative <code class="inline">Schema</code>, and the diffing engine migrates them in dependency order: tables, then virtual tables, then triggers.
+          </p>
+          <h3>Foreign keys</h3>
+          <p>
+            SQLite disables foreign key enforcement on new connections, so enable it per connection. References themselves are declared on the column:
+          </p>
+          <figure class="code">
+            <figcaption><span>reference by declaration</span><button class="copy" data-copy="code-fk">Copy</button></figcaption>
+            <pre><code id="code-fk" set:html={highlight(fkSnippet)} /></pre>
+          </figure>
+          <h3>Full-text search tables</h3>
+          <p>
+            <code class="inline">VirtualTable.fts5()</code> (FTS4 and FTS3 work the same way) binds a search index directly to its content table. The engine inspects <code class="inline">sqlite_master</code> to create or rebuild virtual tables as definitions change.
+          </p>
+          <figure class="code">
+            <figcaption><span>bound FTS index</span><button class="copy" data-copy="code-fts">Copy</button></figcaption>
+            <pre><code id="code-fts" set:html={highlight(ftsSnippet)} /></pre>
+          </figure>
+          <h3>Triggers</h3>
+          <p>
+            Use the zero-boilerplate FTS sync preset, or a custom trigger object with explicit timing, event, and body:
+          </p>
+          <figure class="code">
+            <figcaption><span>preset or custom</span><button class="copy" data-copy="code-trigger">Copy</button></figcaption>
+            <pre><code id="code-trigger" set:html={highlight(triggerSnippet)} /></pre>
+          </figure>
+        </section>
+      </div>
+
+      <div class="onward">
+        <a href="/guides/fetch-forge">← fetch_forge guide</a>
+        <a href="/guides/sqlite-query-forge">Next: sqlite_query_forge guide →</a>
+      </div>
+    </div>
+
+    <footer>
+      <div class="wrap">
+        <span>This guide derives from the sqlite_schema_forge README, which stays authoritative.</span>
+        <span><a href="https://github.com/albetnov/the_forge_ecosystem">Monorepo</a> · <a href="https://github.com/albetnov/the_forge_ecosystem/blob/main/LICENSE">MIT</a> · <a href="https://pub.dev/packages/sqlite_schema_forge">pub.dev</a></span>
+      </div>
+    </footer>
+
+    <script>
+      document.querySelectorAll(".copy").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const el = document.getElementById(btn.dataset.copy);
+          const done = () => {
+            btn.textContent = "Copied";
+            setTimeout(() => (btn.textContent = "Copy"), 1600);
+          };
+          try {
+            await navigator.clipboard.writeText(el.textContent);
+            done();
+          } catch {
+            const r = document.createRange();
+            r.selectNodeContents(el);
+            const s = getSelection();
+            s.removeAllRanges();
+            s.addRange(r);
+            done();
+          }
+        });
+      });
+    </script>
+  </body>
+</html>

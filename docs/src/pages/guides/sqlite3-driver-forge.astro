@@ -1,0 +1,430 @@
+---
+// sqlite3_driver_forge quick-start guide. Same Read frame as the other guides.
+// All prose and code derived from packages/sqlite3_driver_forge/README.md.
+function highlight(src) {
+  const esc = src.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const re = /(\/\/[^\n]*|#[^\n]*)|('(?:[^'\\\n]|\\.)*')|\b(final|const|var|late|class|extends|import|return|await|async|if|else|new|this|super|is|in|as|get|static|factory|try|catch|finally|throw)\b/g;
+  return esc.replace(re, (m, com, str, kw) => {
+    if (com) return `<span class="tok-c">${com}</span>`;
+    if (str) return `<span class="tok-s">${str}</span>`;
+    if (kw) return `<span class="tok-k">${kw}</span>`;
+    return m;
+  });
+}
+const installCmd = `dart pub add sqlite3_driver_forge`;
+const wireSnippet = `import 'package:sqlite3_driver_forge/sqlite3_driver_forge.dart';
+import 'package:sqlite_query_forge/sqlite_query_forge.dart';
+import 'package:sqlite_schema_forge/sqlite_schema_forge.dart' as schema;
+
+final driver = SqliteDriver.file('/data/app.db');
+await driver.connect();
+
+await schema.SqliteSchemaForge.migrate(
+  db: driver, // DatabaseExecutor
+  targetSchema: schema.Schema(version: 1, tables: [...]),
+);
+
+final forge = Forge(driver); // ForgeExecutor`;
+const useSnippet = `final driver = SqliteDriver.file('/data/app.db');
+await driver.connect();
+try {
+  await driver.execute('CREATE TABLE t (id INTEGER PRIMARY KEY, v TEXT);');
+  final id = await driver.insert('INSERT INTO t (v) VALUES (?);', ['hi']);
+  final rows = await driver.query('SELECT * FROM t WHERE id = ?;', [id]);
+
+  await driver.transaction((txn) async {
+    await txn.execute("INSERT INTO t (v) VALUES ('atomic');");
+  });
+
+  await driver.backupTo('/data/app.backup.db');
+} finally {
+  await driver.disconnect();
+}`;
+const cipherYaml = `hooks:
+  user_defines:
+    sqlite3:
+      source: sqlite3mc # or: sqlcipher`;
+const cipherSnippet = `final password = SecurePassword.text(await loadFromSecureStorage());
+try {
+  await driver.connect(cipher: password);
+} finally {
+  password.dispose(); // zero the bytes; the driver retains nothing
+}`;
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <meta
+      name="description"
+      content="sqlite3_driver_forge quick-start guide: connect, serialized access, configure and export, SQLCipher encryption, and platform limits."
+    />
+    <title>sqlite3_driver_forge quick start: The Forge Ecosystem</title>
+    <style is:global>
+      :root {
+        --paper: #fbfaf6;
+        --paper-deep: #f3efe4;
+        --ink: #16202c;
+        --ink-soft: #43536a;
+        --rule: #e0d9c6;
+        --board: #141c28;
+        --board-rule: #2a3547;
+        --board-ink: #f2efe6;
+        --board-soft: #b9c2d0;
+        --red: #b3271e;
+        --red-bright: #ff8a7a;
+        --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas,
+          "Liberation Mono", monospace;
+        --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+      }
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink);
+        font-family: var(--sans);
+        font-size: 1.0625rem;
+        line-height: 1.65;
+      }
+      ::selection { background: var(--red); color: #fff; }
+      :focus-visible {
+        outline: 2px solid var(--red);
+        outline-offset: 3px;
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar { width: 12px; }
+      ::-webkit-scrollbar-track { background: var(--paper-deep); }
+      ::-webkit-scrollbar-thumb {
+        background: var(--ink-soft);
+        border-radius: 8px;
+        border: 3px solid var(--paper-deep);
+      }
+      .wrap { max-width: 72rem; margin: 0 auto; padding: 0 1.5rem; }
+      .masthead {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 0.5rem 1rem;
+        padding: 1.25rem 0 0.75rem;
+        border-bottom: 2px solid var(--ink);
+      }
+      .wordmark {
+        margin: 0;
+        font-size: 1rem;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        font-weight: 800;
+      }
+      .wordmark a { color: inherit; text-decoration: none; }
+      .wordmark .rule-red { color: var(--red); }
+      .masthead nav { display: flex; flex-wrap: wrap; gap: 1rem; font-size: 0.9375rem; }
+      .masthead nav a { color: var(--ink-soft); text-underline-offset: 4px; }
+      .masthead nav a:hover { color: var(--red); }
+      .band {
+        background: var(--board);
+        color: var(--board-ink);
+        border-radius: 14px;
+        margin: 1.75rem 0 0;
+        padding: 2rem clamp(1.25rem, 4vw, 2.5rem);
+        box-shadow: 10px 14px 28px rgba(20, 28, 40, 0.28);
+      }
+      .band h1 {
+        margin: 0;
+        font-size: clamp(2rem, 5vw, 3.25rem);
+        line-height: 1.1;
+        letter-spacing: -0.025em;
+        font-weight: 800;
+        text-wrap: balance;
+      }
+      .band h1 .t-red { color: var(--red-bright); }
+      .band .lede { margin: 0.9rem 0 0; color: var(--board-soft); max-width: 68ch; }
+      .band .meta { display: flex; flex-wrap: wrap; gap: 0.625rem; margin-top: 1.25rem; }
+      .band .meta a, .band .meta span.ver {
+        font-family: var(--mono);
+        font-size: 0.8125rem;
+        color: var(--board-ink);
+        border: 1px solid var(--board-rule);
+        border-radius: 999px;
+        padding: 0.45rem 1.1rem;
+        text-decoration: none;
+        font-variant-numeric: tabular-nums;
+      }
+      .band .meta a:hover { border-color: var(--red-bright); color: #fff; }
+      .band .meta span.ver { color: var(--red-bright); }
+      .toc {
+        list-style: none;
+        margin: 2.5rem 0 0;
+        padding: 0;
+        border-top: 2px solid var(--ink);
+      }
+      .toc li { border-bottom: 1px solid var(--rule); }
+      .toc a {
+        display: flex;
+        gap: 1rem;
+        align-items: baseline;
+        padding: 0.7rem 0.25rem;
+        color: var(--ink);
+        text-decoration: none;
+      }
+      .toc a:hover { color: var(--red); }
+      .toc .stop {
+        font-family: var(--mono);
+        font-size: 0.8125rem;
+        color: var(--red);
+        font-weight: 700;
+        min-width: 2.5rem;
+      }
+      .prose > p, .prose > ul { max-width: 70ch; }
+      .prose section.block { padding: 3rem 0 0; }
+      .prose h2 {
+        margin: 0 0 0.5rem;
+        font-size: clamp(1.5rem, 3vw, 2rem);
+        letter-spacing: -0.02em;
+        line-height: 1.2;
+        text-wrap: balance;
+      }
+      .prose h3 { margin: 2rem 0 0.5rem; font-size: 1rem; letter-spacing: -0.01em; }
+      .prose p { margin: 0 0 1rem; }
+      .prose li { margin-bottom: 0.4rem; }
+      .prose code.inline {
+        font-family: var(--mono);
+        font-size: 0.875em;
+        background: var(--paper-deep);
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        padding: 0.1em 0.35em;
+      }
+      figure.code {
+        margin: 1.25rem 0;
+        border: 1px solid var(--rule);
+        border-radius: 12px;
+        background: #fff;
+        box-shadow: 8px 12px 24px rgba(22, 32, 44, 0.1);
+        overflow: hidden;
+      }
+      figure.code figcaption {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.65rem 1rem;
+        border-bottom: 1px solid var(--rule);
+        font-family: var(--mono);
+        font-size: 0.8125rem;
+        color: var(--ink-soft);
+      }
+      .copy {
+        font-family: var(--mono);
+        font-size: 0.75rem;
+        background: transparent;
+        border: 1px solid var(--rule);
+        border-radius: 999px;
+        padding: 0.3rem 0.8rem;
+        cursor: pointer;
+        color: var(--ink);
+      }
+      .copy:hover { border-color: var(--ink); }
+      figure.code pre {
+        margin: 0;
+        padding: 1.1rem 1.2rem 1.3rem;
+        overflow-x: auto;
+        font-family: var(--mono);
+        font-size: 0.8125rem;
+        line-height: 1.65;
+      }
+      figure.code pre code { font-variant-numeric: tabular-nums; }
+      .tok-k { color: var(--ink); font-weight: 700; }
+      .tok-s { color: #8f1f18; }
+      .tok-c { color: var(--ink-soft); font-style: italic; }
+      .note {
+        border: 1px solid var(--rule);
+        border-radius: 12px;
+        background: #fff;
+        padding: 1rem 1.25rem;
+        margin: 1.25rem 0;
+        max-width: 70ch;
+      }
+      .note p { margin: 0; font-size: 0.9375rem; }
+      .note .lead { font-family: var(--mono); font-weight: 700; color: var(--red); }
+      .onward {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem 1.5rem;
+        justify-content: space-between;
+        margin-top: 3rem;
+        border-top: 2px solid var(--ink);
+        padding: 1.25rem 0 0;
+      }
+      .onward a { color: var(--ink); text-underline-offset: 4px; font-weight: 700; }
+      .onward a:hover { color: var(--red); }
+      footer {
+        margin-top: 2.5rem;
+        border-top: 2px solid var(--ink);
+        padding: 1.5rem 0 2.5rem;
+        color: var(--ink-soft);
+        font-size: 0.875rem;
+      }
+      footer .wrap { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; justify-content: space-between; }
+      footer a { color: var(--ink); text-underline-offset: 4px; }
+      footer a:hover { color: var(--red); }
+      @media (prefers-reduced-motion: reduce) {
+        html { scroll-behavior: auto; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="masthead">
+        <p class="wordmark"><a href="/">The Forge <span class="rule-red">/</span> Ecosystem</a></p>
+        <nav aria-label="Primary">
+          <a href="/guides/">Guides</a>
+          <a href="https://github.com/albetnov/the_forge_ecosystem">GitHub</a>
+        </nav>
+      </div>
+    </div>
+
+    <div class="wrap">
+      <div class="band">
+        <h1>sqlite3_driver_forge <span class="t-red">quick start</span></h1>
+        <p class="lede">
+          A background-isolate driver over package:sqlite3 for the forge
+          packages. It owns the connection lifecycle, serializes every access
+          through one connection on a dedicated worker isolate, and implements
+          both forge executor contracts at once, with SQLCipher support.
+        </p>
+        <div class="meta">
+          <span class="ver">0.1.0</span>
+          <a href="https://pub.dev/packages/sqlite3_driver_forge">pub.dev</a>
+          <a href="https://github.com/albetnov/the_forge_ecosystem/tree/main/packages/sqlite3_driver_forge">README source</a>
+        </div>
+      </div>
+
+      <ol class="toc" aria-label="Stops on this line">
+        <li><a href="#install"><span class="stop">S1</span>Install the line</a></li>
+        <li><a href="#connect"><span class="stop">S2</span>Connect and drive</a></li>
+        <li><a href="#serialize"><span class="stop">S3</span>Serialized access</a></li>
+        <li><a href="#configure"><span class="stop">S4</span>Configure and export</a></li>
+        <li><a href="#encrypt"><span class="stop">S5</span>Encrypted databases</a></li>
+        <li><a href="#limits"><span class="stop">S6</span>Platform limits</a></li>
+      </ol>
+
+      <div class="prose">
+        <section class="block" id="install" aria-labelledby="install-h">
+          <h2 id="install-h">Install the line</h2>
+          <p>
+            One dependency on top of <code class="inline">package:sqlite3</code>. One instance serves both packages, so import one of the two clashing <code class="inline">Table</code>/<code class="inline">Column</code> definitions with a prefix:
+          </p>
+          <figure class="code">
+            <figcaption><span>terminal</span><button class="copy" data-copy="code-install">Copy</button></figcaption>
+            <pre><code id="code-install" set:html={highlight(installCmd)} /></pre>
+          </figure>
+          <figure class="code">
+            <figcaption><span>one instance, both contracts</span><button class="copy" data-copy="code-wire">Copy</button></figcaption>
+            <pre><code id="code-wire" set:html={highlight(wireSnippet)} /></pre>
+          </figure>
+        </section>
+
+        <section class="block" id="connect" aria-labelledby="connect-h">
+          <h2 id="connect-h">Connect and drive</h2>
+          <p>
+            The SQLite connection lives on a worker isolate; the main isolate never blocks on I/O. Open a file (or run in-memory), drive it with the same verbs the query builder compiles to, back it up, then disconnect. Unexpected isolate death fails pending operations instead of hanging them.
+          </p>
+          <figure class="code">
+            <figcaption><span>full lifecycle</span><button class="copy" data-copy="code-use">Copy</button></figcaption>
+            <pre><code id="code-use" set:html={highlight(useSnippet)} /></pre>
+          </figure>
+          <div class="note">
+            <p><span class="lead">Aliases:</span> <code class="inline">connect()</code> and <code class="inline">disconnect()</code> also answer to <code class="inline">open()</code> and <code class="inline">close()</code>.</p>
+          </div>
+        </section>
+
+        <section class="block" id="serialize" aria-labelledby="serialize-h">
+          <h2 id="serialize-h">Serialized access</h2>
+          <p>
+            Concurrent callers queue behind a FIFO mutex in call order. Transactions (<code class="inline">BEGIN IMMEDIATE</code>, nested <code class="inline">SAVEPOINT</code>s) hold the connection exclusively, and concurrent transactions serialize atomically. Like the drift connection manager this mirrors, there is exactly one connection and it is never shared mid-statement.
+          </p>
+        </section>
+
+        <section class="block" id="configure" aria-labelledby="configure-h">
+          <h2 id="configure-h">Configure and export</h2>
+          <p>Configuration is first-class, not a reopen dance:</p>
+          <ul>
+            <li>File path (exposed via <code class="inline">path</code> so the file can be exported by hand), in-memory mode, and read-only mode.</li>
+            <li>Foreign keys, journal mode, synchronous mode, busy timeout, VFS, and URI filenames.</li>
+          </ul>
+          <p>
+            Export is two calls: <code class="inline">backupTo(path)</code> takes a hot backup via <code class="inline">VACUUM INTO</code> while connected; <code class="inline">restoreFrom(path)</code> is a cold file copy while disconnected.
+          </p>
+        </section>
+
+        <section class="block" id="encrypt" aria-labelledby="encrypt-h">
+          <h2 id="encrypt-h">Encrypted databases</h2>
+          <p>
+            Build the app with an encryption-capable SQLite (SQLite3MultipleCiphers is recommended; sqlcipher also works, since the driver only speaks <code class="inline">PRAGMA key</code>, which both understand). Declare it in the <strong>app's</strong> pubspec:
+          </p>
+          <figure class="code">
+            <figcaption><span>pubspec.yaml, encryption capable</span><button class="copy" data-copy="code-cipheryaml">Copy</button></figcaption>
+            <pre><code id="code-cipheryaml" set:html={highlight(cipherYaml)} /></pre>
+          </figure>
+          <p>Then connect with a password the driver never retains:</p>
+          <figure class="code">
+            <figcaption><span>connect with a key</span><button class="copy" data-copy="code-cipher">Copy</button></figcaption>
+            <pre><code id="code-cipher" set:html={highlight(cipherSnippet)} /></pre>
+          </figure>
+          <div class="note">
+            <p><span class="lead">Prefer raw keys:</span> <code class="inline">SecurePassword.rawKey(bytes)</code> (32 random bytes) hex-encodes straight from bytes and never materializes a <code class="inline">String</code>. A wrong key surfaces as <code class="inline">SqlCipherAuthException</code>. See the <code class="inline">SecurePassword</code> docs for the GC-caveat details.</p>
+          </div>
+        </section>
+
+        <section class="block" id="limits" aria-labelledby="limits-h">
+          <h2 id="limits-h">Platform limits</h2>
+          <p>Three hard edges, stated up front:</p>
+          <ul>
+            <li><strong>VM-only.</strong> The driver uses <code class="inline">dart:io</code>, <code class="inline">dart:isolate</code>, and FFI. There is no web support.</li>
+            <li><strong>Six value types cross the isolate boundary:</strong> null, bool, int, double, String, and Uint8List. Anything else throws <code class="inline">ArgumentError</code> before reaching SQLite.</li>
+            <li><strong>Typed failures.</strong> SQLite errors surface as <code class="inline">SqliteDriverException</code> with the extended result code; calls while disconnected throw <code class="inline">SqliteDriverClosedException</code>.</li>
+          </ul>
+        </section>
+      </div>
+
+      <div class="onward">
+        <a href="/guides/sqlite-query-forge">← sqlite_query_forge guide</a>
+        <a href="/guides/">All guides ↑</a>
+      </div>
+    </div>
+
+    <footer>
+      <div class="wrap">
+        <span>This guide derives from the sqlite3_driver_forge README, which stays authoritative.</span>
+        <span><a href="https://github.com/albetnov/the_forge_ecosystem">Monorepo</a> · <a href="https://github.com/albetnov/the_forge_ecosystem/blob/main/LICENSE">MIT</a> · <a href="https://pub.dev/packages/sqlite3_driver_forge">pub.dev</a></span>
+      </div>
+    </footer>
+
+    <script>
+      document.querySelectorAll(".copy").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const el = document.getElementById(btn.dataset.copy);
+          const done = () => {
+            btn.textContent = "Copied";
+            setTimeout(() => (btn.textContent = "Copy"), 1600);
+          };
+          try {
+            await navigator.clipboard.writeText(el.textContent);
+            done();
+          } catch {
+            const r = document.createRange();
+            r.selectNodeContents(el);
+            const s = getSelection();
+            s.removeAllRanges();
+            s.addRange(r);
+            done();
+          }
+        });
+      });
+    </script>
+  </body>
+</html>

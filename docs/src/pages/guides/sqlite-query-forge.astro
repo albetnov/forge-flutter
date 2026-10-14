@@ -1,0 +1,557 @@
+---
+// sqlite_query_forge quick-start guide. Same Read frame as the other guides.
+// All prose and code derived from packages/sqlite_query_forge/README.md.
+function highlight(src) {
+  const esc = src.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const re = /(\/\/[^\n]*|#[^\n]*)|('(?:[^'\\\n]|\\.)*')|\b(final|const|var|late|class|extends|import|return|await|async|if|else|new|this|super|is|in|as|get|static|factory)\b/g;
+  return esc.replace(re, (m, com, str, kw) => {
+    if (com) return `<span class="tok-c">${com}</span>`;
+    if (str) return `<span class="tok-s">${str}</span>`;
+    if (kw) return `<span class="tok-k">${kw}</span>`;
+    return m;
+  });
+}
+const installCmd = `dart pub add sqlite_query_forge`;
+const tableSnippet = `final class UsersTable extends Table<User> {
+  const UsersTable() : super('users', mapper: User.fromRow);
+
+  Column<int> get id => const Column.id();
+  Column<String> get name => const Column('name');
+  Column<bool> get isActive => const Column('is_active');
+}
+
+const users = UsersTable();`;
+const selectSnippet = `// See "No bundled driver" at the end for the adapter itself.
+final forge = Forge(MySqliteExecutor(db));
+
+// The table mapper is applied for you.
+final User user = await forge.selectFrom(users).where(users.id.eq(42)).getSingle();
+
+// Project a few columns into a record instead of a model.
+final (int, String) idAndName = await forge
+    .selectFrom(users)
+    .select([users.id, users.name])
+    .map((row) => (row['id'] as int, row['name'] as String))
+    .getSingle();`;
+const filterSnippet = `var query = forge.selectFrom(users).where(users.isActive.eq(true));
+if (search != null) query = query.andWhere(users.name.like('%$search%'));
+if (since != null) query = query.orWhere(users.id.gt(since));`;
+const joinSnippet = `final transactions = TransactionsTable();
+
+final rows = await forge
+    .selectFrom(users)
+    .leftJoin(
+      transactions.sourceAs('t'),
+      on: users
+          .qualify(users.id)
+          .sameAs(transactions.qualify(transactions.userId, 't')),
+    )
+    .where(transactions.qualify(transactions.amount, 't').gt(100))
+    .getMany();`;
+const writeSnippet = `// The new rowid.
+final id = await forge.insertInto(users).values({
+  'name': 'Ada',
+  'email': 'ada@example.com',
+}).execute();
+
+// One statement, many rows.
+await forge
+    .insertInto(users)
+    .valuesAll([
+      {'name': 'Ada', 'email': 'ada@example.com'},
+      {'name': 'Grace', 'email': 'grace@example.com'},
+    ])
+    .execute();
+
+// Affected rows.
+final updated = await forge
+    .update(users)
+    .values({'is_active': false})
+    .where(users.id.gt(1))
+    .execute();
+final deleted = await forge.deleteFrom(users).where(users.id.eq(1)).execute();`;
+const upsertSnippet = `await forge
+    .insertInto(users)
+    .values({'email': 'ada@example.com', 'name': 'ada'})
+    .onConflictIgnore()
+    .execute();
+
+await forge
+    .insertInto(users)
+    .values({'email': 'ada@example.com', 'name': 'ada'})
+    .onConflictUpdate({
+      'name': const RawSql('excluded."name"'),
+    }, columns: [users.email])
+    .execute();`;
+const returningSnippet = `final rows = await forge
+    .insertInto(users)
+    .values({'name': 'Ada'})
+    .returning([users.id, users.name])
+    .getMany();
+
+// Every column comes back.
+final whole = await forge
+    .insertInto(users)
+    .values({'name': 'Ada'})
+    .returning()
+    .getMany();`;
+const txSnippet = `await forge.transaction((tx) async {
+  await tx.insertInto(users).values({'name': 'Ada'}).execute();
+  await tx.transaction((nested) async {
+    await nested.deleteFrom(users).where(users.id.eq(1)).execute();
+  });
+});`;
+const compileSnippet = `final query = forge.selectFrom(users).where(users.isActive.eq(true));
+
+query.compile();       // CompiledQuery('SELECT * WHERE "is_active" = ?', [1])
+query.toSql();         // 'SELECT * FROM "users" WHERE "is_active" = ?'
+query.getRawArgs();    // [1]`;
+const bridgeSnippet = `final targetSchema = schemaOf(version: 2, tables: [users, transactions]);
+
+await SqliteSchemaForge.migrate(
+  db: ForgeDatabaseExecutor(forge),
+  targetSchema: targetSchema,
+);`;
+const adapterSnippet = `final class SqfliteExecutor implements ForgeExecutor {
+  SqfliteExecutor(this._db);
+
+  final Database _db;
+
+  @override
+  Future<List<Map<String, Object?>>> query(String sql, [List<Object?>? args]) =>
+      _db.rawQuery(sql, args);
+
+  @override
+  Future<int> execute(String sql, [List<Object?>? args]) =>
+      _db.rawUpdate(sql, args);
+
+  @override
+  Future<int> insert(String sql, [List<Object?>? args]) =>
+      _db.rawInsert(sql, args);
+
+  @override
+  Future<T> transaction<T>(Future<T> Function(ForgeExecutor txn) action) =>
+      _db.transaction((txn) => action(SqfliteExecutor(txn)));
+}
+
+final executor = SqfliteExecutor(db);
+final forge = Forge(executor);`;
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <meta
+      name="description"
+      content="sqlite_query_forge quick-start guide: sealed expressions, reads, writes, transactions, compiled SQL, and the schema bridge."
+    />
+    <title>sqlite_query_forge quick start: The Forge Ecosystem</title>
+    <style is:global>
+      :root {
+        --paper: #fbfaf6;
+        --paper-deep: #f3efe4;
+        --ink: #16202c;
+        --ink-soft: #43536a;
+        --rule: #e0d9c6;
+        --board: #141c28;
+        --board-rule: #2a3547;
+        --board-ink: #f2efe6;
+        --board-soft: #b9c2d0;
+        --red: #b3271e;
+        --red-bright: #ff8a7a;
+        --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas,
+          "Liberation Mono", monospace;
+        --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+      }
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink);
+        font-family: var(--sans);
+        font-size: 1.0625rem;
+        line-height: 1.65;
+      }
+      ::selection { background: var(--red); color: #fff; }
+      :focus-visible {
+        outline: 2px solid var(--red);
+        outline-offset: 3px;
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar { width: 12px; }
+      ::-webkit-scrollbar-track { background: var(--paper-deep); }
+      ::-webkit-scrollbar-thumb {
+        background: var(--ink-soft);
+        border-radius: 8px;
+        border: 3px solid var(--paper-deep);
+      }
+      .wrap { max-width: 72rem; margin: 0 auto; padding: 0 1.5rem; }
+      .masthead {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 0.5rem 1rem;
+        padding: 1.25rem 0 0.75rem;
+        border-bottom: 2px solid var(--ink);
+      }
+      .wordmark {
+        margin: 0;
+        font-size: 1rem;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        font-weight: 800;
+      }
+      .wordmark a { color: inherit; text-decoration: none; }
+      .wordmark .rule-red { color: var(--red); }
+      .masthead nav { display: flex; flex-wrap: wrap; gap: 1rem; font-size: 0.9375rem; }
+      .masthead nav a { color: var(--ink-soft); text-underline-offset: 4px; }
+      .masthead nav a:hover { color: var(--red); }
+      .band {
+        background: var(--board);
+        color: var(--board-ink);
+        border-radius: 14px;
+        margin: 1.75rem 0 0;
+        padding: 2rem clamp(1.25rem, 4vw, 2.5rem);
+        box-shadow: 10px 14px 28px rgba(20, 28, 40, 0.28);
+      }
+      .band h1 {
+        margin: 0;
+        font-size: clamp(2rem, 5vw, 3.25rem);
+        line-height: 1.1;
+        letter-spacing: -0.025em;
+        font-weight: 800;
+        text-wrap: balance;
+      }
+      .band h1 .t-red { color: var(--red-bright); }
+      .band .lede { margin: 0.9rem 0 0; color: var(--board-soft); max-width: 68ch; }
+      .band .meta { display: flex; flex-wrap: wrap; gap: 0.625rem; margin-top: 1.25rem; }
+      .band .meta a, .band .meta span.ver {
+        font-family: var(--mono);
+        font-size: 0.8125rem;
+        color: var(--board-ink);
+        border: 1px solid var(--board-rule);
+        border-radius: 999px;
+        padding: 0.45rem 1.1rem;
+        text-decoration: none;
+        font-variant-numeric: tabular-nums;
+      }
+      .band .meta a:hover { border-color: var(--red-bright); color: #fff; }
+      .band .meta span.ver { color: var(--red-bright); }
+      .toc {
+        list-style: none;
+        margin: 2.5rem 0 0;
+        padding: 0;
+        border-top: 2px solid var(--ink);
+      }
+      .toc li { border-bottom: 1px solid var(--rule); }
+      .toc a {
+        display: flex;
+        gap: 1rem;
+        align-items: baseline;
+        padding: 0.7rem 0.25rem;
+        color: var(--ink);
+        text-decoration: none;
+      }
+      .toc a:hover { color: var(--red); }
+      .toc .stop {
+        font-family: var(--mono);
+        font-size: 0.8125rem;
+        color: var(--red);
+        font-weight: 700;
+        min-width: 2.5rem;
+      }
+      .prose > p, .prose > ul { max-width: 70ch; }
+      .prose section.block { padding: 3rem 0 0; }
+      .prose h2 {
+        margin: 0 0 0.5rem;
+        font-size: clamp(1.5rem, 3vw, 2rem);
+        letter-spacing: -0.02em;
+        line-height: 1.2;
+        text-wrap: balance;
+      }
+      .prose h3 { margin: 2rem 0 0.5rem; font-size: 1rem; letter-spacing: -0.01em; }
+      .prose p { margin: 0 0 1rem; }
+      .prose li { margin-bottom: 0.4rem; }
+      .prose code.inline {
+        font-family: var(--mono);
+        font-size: 0.875em;
+        background: var(--paper-deep);
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        padding: 0.1em 0.35em;
+      }
+      figure.code {
+        margin: 1.25rem 0;
+        border: 1px solid var(--rule);
+        border-radius: 12px;
+        background: #fff;
+        box-shadow: 8px 12px 24px rgba(22, 32, 44, 0.1);
+        overflow: hidden;
+      }
+      figure.code figcaption {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.65rem 1rem;
+        border-bottom: 1px solid var(--rule);
+        font-family: var(--mono);
+        font-size: 0.8125rem;
+        color: var(--ink-soft);
+      }
+      .copy {
+        font-family: var(--mono);
+        font-size: 0.75rem;
+        background: transparent;
+        border: 1px solid var(--rule);
+        border-radius: 999px;
+        padding: 0.3rem 0.8rem;
+        cursor: pointer;
+        color: var(--ink);
+      }
+      .copy:hover { border-color: var(--ink); }
+      figure.code pre {
+        margin: 0;
+        padding: 1.1rem 1.2rem 1.3rem;
+        overflow-x: auto;
+        font-family: var(--mono);
+        font-size: 0.8125rem;
+        line-height: 1.65;
+      }
+      figure.code pre code { font-variant-numeric: tabular-nums; }
+      .tok-k { color: var(--ink); font-weight: 700; }
+      .tok-s { color: #8f1f18; }
+      .tok-c { color: var(--ink-soft); font-style: italic; }
+      .note {
+        border: 1px solid var(--rule);
+        border-radius: 12px;
+        background: #fff;
+        padding: 1rem 1.25rem;
+        margin: 1.25rem 0;
+        max-width: 70ch;
+      }
+      .note p { margin: 0; font-size: 0.9375rem; }
+      .note .lead { font-family: var(--mono); font-weight: 700; color: var(--red); }
+      .onward {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem 1.5rem;
+        justify-content: space-between;
+        margin-top: 3rem;
+        border-top: 2px solid var(--ink);
+        padding: 1.25rem 0 0;
+      }
+      .onward a { color: var(--ink); text-underline-offset: 4px; font-weight: 700; }
+      .onward a:hover { color: var(--red); }
+      footer {
+        margin-top: 2.5rem;
+        border-top: 2px solid var(--ink);
+        padding: 1.5rem 0 2.5rem;
+        color: var(--ink-soft);
+        font-size: 0.875rem;
+      }
+      footer .wrap { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; justify-content: space-between; }
+      footer a { color: var(--ink); text-underline-offset: 4px; }
+      footer a:hover { color: var(--red); }
+      @media (prefers-reduced-motion: reduce) {
+        html { scroll-behavior: auto; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="masthead">
+        <p class="wordmark"><a href="/">The Forge <span class="rule-red">/</span> Ecosystem</a></p>
+        <nav aria-label="Primary">
+          <a href="/guides/">Guides</a>
+          <a href="https://github.com/albetnov/the_forge_ecosystem">GitHub</a>
+        </nav>
+      </div>
+    </div>
+
+    <div class="wrap">
+      <div class="band">
+        <h1>sqlite_query_forge <span class="t-red">quick start</span></h1>
+        <p class="lede">
+          A zero-cost declarative query builder in Dart 3: sealed expressions,
+          immutable builders, and every runtime value bound as a parameter.
+          Reads, writes, transactions, and the bridge back to the schema
+          package, with no bundled driver and no code generation.
+        </p>
+        <div class="meta">
+          <span class="ver">0.1.0</span>
+          <a href="https://pub.dev/packages/sqlite_query_forge">pub.dev</a>
+          <a href="https://github.com/albetnov/the_forge_ecosystem/tree/main/packages/sqlite_query_forge">README source</a>
+        </div>
+      </div>
+
+      <ol class="toc" aria-label="Stops on this line">
+        <li><a href="#install"><span class="stop">S1</span>Install the line</a></li>
+        <li><a href="#design"><span class="stop">S2</span>Three design ideas</a></li>
+        <li><a href="#reads"><span class="stop">S3</span>Reads: select, filter, join</a></li>
+        <li><a href="#writes"><span class="stop">S4</span>Writes: insert, upsert, return</a></li>
+        <li><a href="#tx"><span class="stop">S5</span>Transactions and compiled SQL</a></li>
+        <li><a href="#bridge"><span class="stop">S6</span>Bridge back to schema</a></li>
+      </ol>
+
+      <div class="prose">
+        <section class="block" id="install" aria-labelledby="install-h">
+          <h2 id="install-h">Install the line</h2>
+          <p>
+            One dependency for the builder. It reaches the database through a
+            <code class="inline">ForgeExecutor</code> you implement over the binding you already use, so plan on one small adapter (stop S6). It also depends on <code class="inline">sqlite_schema_forge</code> for the migration bridge, and ships no driver of its own.
+          </p>
+          <figure class="code">
+            <figcaption><span>terminal</span><button class="copy" data-copy="code-install">Copy</button></figcaption>
+            <pre><code id="code-install" set:html={highlight(installCmd)} /></pre>
+          </figure>
+        </section>
+
+        <section class="block" id="design" aria-labelledby="design-h">
+          <h2 id="design-h">Three design ideas</h2>
+          <p>Everything in the query builder follows from three choices:</p>
+          <ul>
+            <li><strong>Sealed types.</strong> <code class="inline">Expression</code> is a sealed hierarchy, so a switch over it is exhaustively checked, and adding a node fails to compile until it is handled.</li>
+            <li><strong>Immutability and const.</strong> A <code class="inline">SelectBuilder</code> is immutable, so any chain can be shared, cached, or built conditionally. <code class="inline">Table</code> and <code class="inline">Column</code> declarations are <code class="inline">const</code> and canonicalized, so a column reference costs no allocation the second time.</li>
+            <li><strong>Values are always bound.</strong> Every runtime value becomes a <code class="inline">?</code> parameter. SQL text is safe by construction, and prepared statements cache and reuse across argument values. Identifiers are quoted in exactly one place.</li>
+          </ul>
+          <div class="note">
+            <p><span class="lead">Hot path:</span> a filter such as <code class="inline">users.id.eq(42)</code> allocates exactly one node. The column on its left is an existing <code class="inline">const</code> object, not a fresh wrapper.</p>
+          </div>
+        </section>
+
+        <section class="block" id="reads" aria-labelledby="reads-h">
+          <h2 id="reads-h">Reads: select, filter, join</h2>
+          <p>
+            Declare the table once as a const object with an explicit constructor, then query through the <code class="inline">Forge</code> facade. The table mapper runs for you; project into records when a full model is more than you need.
+          </p>
+          <figure class="code">
+            <figcaption><span>the table</span><button class="copy" data-copy="code-table">Copy</button></figcaption>
+            <pre><code id="code-table" set:html={highlight(tableSnippet)} /></pre>
+          </figure>
+          <figure class="code">
+            <figcaption><span>select with mapper</span><button class="copy" data-copy="code-select">Copy</button></figcaption>
+            <pre><code id="code-select" set:html={highlight(selectSnippet)} /></pre>
+          </figure>
+          <h3>Filters compose</h3>
+          <p>
+            Builders are immutable, so a chain builds up conditionally with no tracking of which filter came first:
+          </p>
+          <figure class="code">
+            <figcaption><span>conditional chain</span><button class="copy" data-copy="code-filter">Copy</button></figcaption>
+            <pre><code id="code-filter" set:html={highlight(filterSnippet)} /></pre>
+          </figure>
+          <h3>Joins stay explicit</h3>
+          <p>
+            Column-to-column equality gets its own spelling (<code class="inline">sameAs</code>), since Dart cannot overload on argument type. Qualify whichever side needs it and match the alias the join binds:
+          </p>
+          <figure class="code">
+            <figcaption><span>left join with alias</span><button class="copy" data-copy="code-join">Copy</button></figcaption>
+            <pre><code id="code-join" set:html={highlight(joinSnippet)} /></pre>
+          </figure>
+        </section>
+
+        <section class="block" id="writes" aria-labelledby="writes-h">
+          <h2 id="writes-h">Writes: insert, upsert, return</h2>
+          <p>
+            Writes start from the same facade and stay immutable. An <code class="inline">UPDATE</code> or <code class="inline">DELETE</code> with no <code class="inline">where</code> touches every row, so read that twice.
+          </p>
+          <figure class="code">
+            <figcaption><span>insert, update, delete</span><button class="copy" data-copy="code-write">Copy</button></figcaption>
+            <pre><code id="code-write" set:html={highlight(writeSnippet)} /></pre>
+          </figure>
+          <h3>Upserts reach excluded</h3>
+          <p>
+            A value that is an expression is written as a reference rather than bound, which is how the <code class="inline">excluded</code> row is reached:
+          </p>
+          <figure class="code">
+            <figcaption><span>ignore or update on conflict</span><button class="copy" data-copy="code-upsert">Copy</button></figcaption>
+            <pre><code id="code-upsert" set:html={highlight(upsertSnippet)} /></pre>
+          </figure>
+          <h3>Returning turns writes into reads</h3>
+          <p>Rows come back through <code class="inline">getMany()</code> instead of a rowid or a count. Needs SQLite 3.35 or newer.</p>
+          <figure class="code">
+            <figcaption><span>read back what you wrote</span><button class="copy" data-copy="code-returning">Copy</button></figcaption>
+            <pre><code id="code-returning" set:html={highlight(returningSnippet)} /></pre>
+          </figure>
+        </section>
+
+        <section class="block" id="tx" aria-labelledby="tx-h">
+          <h2 id="tx-h">Transactions and compiled SQL</h2>
+          <p>
+            <code class="inline">transaction</code> hands the action a <code class="inline">Forge</code> bound to the transaction, and every statement issued through it joins that transaction. A nested call joins the open one rather than issuing a second <code class="inline">BEGIN</code>; a throw rolls back and propagates.
+          </p>
+          <figure class="code">
+            <figcaption><span>nested joins the open transaction</span><button class="copy" data-copy="code-tx">Copy</button></figcaption>
+            <pre><code id="code-tx" set:html={highlight(txSnippet)} /></pre>
+          </figure>
+          <p>
+            Every builder exposes the same compile step twice: <code class="inline">compile()</code> for SQL plus arguments together, <code class="inline">toSql()</code> and <code class="inline">getRawArgs()</code> for one or the other. Log it, test against it, paste it into a SQLite shell:
+          </p>
+          <figure class="code">
+            <figcaption><span>read the SQL it emits</span><button class="copy" data-copy="code-compile">Copy</button></figcaption>
+            <pre><code id="code-compile" set:html={highlight(compileSnippet)} /></pre>
+          </figure>
+        </section>
+
+        <section class="block" id="bridge" aria-labelledby="bridge-h">
+          <h2 id="bridge-h">Bridge back to schema</h2>
+          <p>
+            Columns can also declare how they are created, so the query path and the migration path read one declaration: the named constructors (<code class="inline">Column.id</code>, <code class="inline">.integer</code>, <code class="inline">.text</code>) attach DDL flags to the very column the queries use. <code class="inline">schemaOf</code> collects tables under one version, and <code class="inline">ForgeDatabaseExecutor</code> presents a <code class="inline">ForgeExecutor</code> as the migrator's <code class="inline">DatabaseExecutor</code>, so one adapter drives both halves.
+          </p>
+          <figure class="code">
+            <figcaption><span>migrate what you query</span><button class="copy" data-copy="code-bridge">Copy</button></figcaption>
+            <pre><code id="code-bridge" set:html={highlight(bridgeSnippet)} /></pre>
+          </figure>
+          <p>The adapter itself is one small class over the binding in use:</p>
+          <figure class="code">
+            <figcaption><span>one adapter, both halves</span><button class="copy" data-copy="code-adapter">Copy</button></figcaption>
+            <pre><code id="code-adapter" set:html={highlight(adapterSnippet)} /></pre>
+          </figure>
+          <div class="note">
+            <p><span class="lead">No code generation:</span> declarations stay hand-written. Indexes, virtual tables, triggers, and composite keys stay in the migration schema, where those concepts already live.</p>
+          </div>
+        </section>
+      </div>
+
+      <div class="onward">
+        <a href="/guides/sqlite-schema-forge">← sqlite_schema_forge guide</a>
+        <a href="/guides/sqlite3-driver-forge">Next: sqlite3_driver_forge guide →</a>
+      </div>
+    </div>
+
+    <footer>
+      <div class="wrap">
+        <span>This guide derives from the sqlite_query_forge README, which stays authoritative.</span>
+        <span><a href="https://github.com/albetnov/the_forge_ecosystem">Monorepo</a> · <a href="https://github.com/albetnov/the_forge_ecosystem/blob/main/LICENSE">MIT</a> · <a href="https://pub.dev/packages/sqlite_query_forge">pub.dev</a></span>
+      </div>
+    </footer>
+
+    <script>
+      document.querySelectorAll(".copy").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const el = document.getElementById(btn.dataset.copy);
+          const done = () => {
+            btn.textContent = "Copied";
+            setTimeout(() => (btn.textContent = "Copy"), 1600);
+          };
+          try {
+            await navigator.clipboard.writeText(el.textContent);
+            done();
+          } catch {
+            const r = document.createRange();
+            r.selectNodeContents(el);
+            const s = getSelection();
+            s.removeAllRanges();
+            s.addRange(r);
+            done();
+          }
+        });
+      });
+    </script>
+  </body>
+</html>

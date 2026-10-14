@@ -1,0 +1,743 @@
+---
+// Forge docs landing: single route. Timetable direction, code-led.
+// All copy and code from the monorepo READMEs; links follow known paths.
+const lines = [
+  {
+    id: "fetch",
+    platform: "P1",
+    pkg: "fetch_forge",
+    runs: "Remote data behind signals",
+    provides: "Query · Mutation · QueryBuilder · QueryScope",
+    depends: "Standalone · pairs with package:signals",
+    version: "0.1.0",
+    short: "STANDALONE",
+    add: "dart pub add fetch_forge",
+    links: [
+      { label: "README", href: "https://github.com/albetnov/the_forge_ecosystem/tree/main/packages/fetch_forge" },
+      { label: "pub.dev", href: "https://pub.dev/packages/fetch_forge" },
+    ],
+  },
+  {
+    id: "schema",
+    platform: "P2",
+    pkg: "sqlite_schema_forge",
+    runs: "Declarative schema + auto-migration",
+    provides: "Schema · Table · Column · plan / applyPlan",
+    depends: "Origin of the SQLite chain",
+    version: "0.1.0",
+    short: "ORIGIN",
+    add: "dart pub add sqlite_schema_forge",
+    links: [
+      { label: "README", href: "https://github.com/albetnov/the_forge_ecosystem/tree/main/packages/sqlite_schema_forge" },
+      { label: "pub.dev", href: "https://pub.dev/packages/sqlite_schema_forge" },
+    ],
+  },
+  {
+    id: "query",
+    platform: "P3",
+    pkg: "sqlite_query_forge",
+    runs: "Zero-cost declarative queries",
+    provides: "SelectBuilder · Expression · bound args",
+    depends: "Via P2 · schema types",
+    version: "0.1.0",
+    short: "VIA P2",
+    add: "dart pub add sqlite_query_forge",
+    links: [
+      { label: "README", href: "https://github.com/albetnov/the_forge_ecosystem/tree/main/packages/sqlite_query_forge" },
+      { label: "pub.dev", href: "https://pub.dev/packages/sqlite_query_forge" },
+    ],
+  },
+  {
+    id: "driver",
+    platform: "P4",
+    pkg: "sqlite3_driver_forge",
+    runs: "Background-isolate driver",
+    provides: "ForgeExecutor · DatabaseExecutor · SQLCipher",
+    depends: "Via P2 · P3 · serves both contracts",
+    version: "0.1.0",
+    short: "VIA P2·P3",
+    add: "dart pub add sqlite3_driver_forge",
+    links: [
+      { label: "README", href: "https://github.com/albetnov/the_forge_ecosystem/tree/main/packages/sqlite3_driver_forge" },
+      { label: "pub.dev", href: "https://pub.dev/packages/sqlite3_driver_forge" },
+    ],
+  },
+];
+const fetchSnippet = `Future<List<String>> fetchUsers(int page) async => ['ada', 'grace', 'alan'];
+
+final users = Query<List<String>, int>(
+  fetcher: fetchUsers,
+  staleTime: const Duration(seconds: 30),
+);
+final page = signal(1);
+
+// One line wires the variables signal to the fetch.
+users.bind(page);
+await Future<void>.delayed(Duration.zero);
+print(users.snapshot.value);
+
+page.value = 2; // New variables, new fetch, same binding.`;
+const schemaSnippet = `final appSchema = Schema(
+  version: 1,
+  tables: [
+    Table(
+      'wallets',
+      [
+        Column.id(),
+        Column.text('name', nullable: false),
+        Column.integer('wallet_type_id', nullable: false),
+        Column.datetime('created_at',
+            defaultValue: RawSql.currentTimestamp),
+      ],
+      indexes: [
+        Index(columns: ['wallet_type_id']),
+      ],
+    ),
+  ],
+);`;
+const querySnippet = `final class UsersTable extends Table<User> {
+  const UsersTable() : super('users', mapper: User.fromRow);
+
+  Column<int> get id => const Column.id();
+  Column<String> get name => const Column('name');
+  Column<bool> get isActive => const Column('is_active');
+}
+
+const users = UsersTable();
+final forge = Forge(MySqliteExecutor(db));
+
+// The table mapper is applied for you.
+final User user = await forge.selectFrom(users).where(users.id.eq(42)).getSingle();`;
+const driverSnippet = `final driver = SqliteDriver.file('/data/app.db');
+await driver.connect();
+
+await schema.SqliteSchemaForge.migrate(
+  db: driver, // DatabaseExecutor
+  targetSchema: schema.Schema(version: 1, tables: [...]),
+);
+
+final forge = Forge(driver); // ForgeExecutor`;
+// Build-time Dart highlighter: comments, strings, keywords. Zero runtime cost.
+function highlight(src) {
+  const esc = src.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const re = /(\/\/[^\n]*)|('(?:[^'\\\n]|\\.)*')|\b(final|const|var|late|class|extends|import|return|await|async|if|else|new|this|super|is|in|as|get|static|factory)\b/g;
+  return esc.replace(re, (m, com, str, kw) => {
+    if (com) return `<span class="tok-c">${com}</span>`;
+    if (str) return `<span class="tok-s">${str}</span>`;
+    if (kw) return `<span class="tok-k">${kw}</span>`;
+    return m;
+  });
+}
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <meta
+      name="description"
+      content="The Forge Ecosystem: small, typed Dart and Flutter packages. Value types, no hidden policy."
+    />
+    <title>The Forge Ecosystem: Departures</title>
+    <style is:global>
+      :root {
+        --paper: #fbfaf6;
+        --paper-deep: #f3efe4;
+        --ink: #16202c;
+        --ink-soft: #43536a;
+        --rule: #e0d9c6;
+        --board: #141c28;
+        --board-rule: #2a3547;
+        --board-ink: #f2efe6;
+        --board-soft: #b9c2d0;
+        --red: #b3271e;
+        --red-bright: #ff8a7a;
+        --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas,
+          "Liberation Mono", monospace;
+        --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+      }
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink);
+        font-family: var(--sans);
+        font-size: 1.0625rem;
+        line-height: 1.6;
+      }
+      ::selection { background: var(--red); color: #fff; }
+      :focus-visible {
+        outline: 2px solid var(--red);
+        outline-offset: 3px;
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar { width: 12px; }
+      ::-webkit-scrollbar-track { background: var(--paper-deep); }
+      ::-webkit-scrollbar-thumb {
+        background: var(--ink-soft);
+        border-radius: 8px;
+        border: 3px solid var(--paper-deep);
+      }
+      .wrap { max-width: 72rem; margin: 0 auto; padding: 0 1.5rem; }
+      /* Masthead */
+      .masthead {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 1.25rem 0 0.75rem;
+        border-bottom: 2px solid var(--ink);
+      }
+      .wordmark {
+        margin: 0;
+        font-size: 1rem;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        font-weight: 800;
+      }
+      .wordmark .rule-red { color: var(--red); }
+      .masthead nav { display: flex; gap: 1.25rem; font-size: 0.9375rem; }
+      .masthead nav a { color: var(--ink-soft); text-underline-offset: 4px; }
+      .masthead nav a:hover { color: var(--red); }
+      /* Departure band */
+      .board {
+        background: var(--board);
+        color: var(--board-ink);
+        border-radius: 14px;
+        margin: 1.75rem 0 0;
+        padding: 1.75rem clamp(1.25rem, 4vw, 2.5rem) 2rem;
+        box-shadow: 10px 14px 28px rgba(20, 28, 40, 0.28);
+      }
+      .board h1 {
+        margin: 0;
+        font-size: clamp(2rem, 5vw, 3.25rem);
+        line-height: 1.08;
+        letter-spacing: -0.025em;
+        font-weight: 800;
+        text-wrap: balance;
+        max-width: 22ch;
+      }
+      .board h1 .t-red { color: var(--red-bright); }
+      .board .lede {
+        margin: 1rem 0 0;
+        color: var(--board-soft);
+        font-size: 1.0625rem;
+        max-width: 68ch;
+      }
+      .departures {
+        list-style: none;
+        margin: 1.75rem 0 0;
+        padding: 0;
+        border-top: 1px solid var(--board-rule);
+      }
+      .departures li { border-bottom: 1px solid var(--board-rule); }
+      .dep {
+        display: grid;
+        grid-template-columns: 3.5rem 1fr auto;
+        grid-template-areas:
+          "plat pkg time"
+          "plat runs status";
+        column-gap: 1rem;
+        align-items: center;
+        width: 100%;
+        padding: 0.9rem 0.75rem;
+        background: transparent;
+        border: 0;
+        color: inherit;
+        font: inherit;
+        text-align: left;
+        cursor: pointer;
+        border-left: 3px solid transparent;
+      }
+      .dep:hover { background: rgba(255, 255, 255, 0.04); }
+      .dep[aria-pressed="true"] {
+        background: rgba(255, 255, 255, 0.05);
+        border-left-color: var(--red-bright);
+      }
+      .dep .plat {
+        grid-area: plat;
+        font-family: var(--mono);
+        font-size: 0.8125rem;
+        color: var(--board-soft);
+        border: 1px solid var(--board-rule);
+        border-radius: 6px;
+        text-align: center;
+        padding: 0.2rem 0;
+      }
+      .dep[aria-pressed="true"] .plat {
+        color: var(--board-ink);
+        border-color: var(--red-bright);
+      }
+      .dep .pkg {
+        grid-area: pkg;
+        font-family: var(--mono);
+        font-weight: 700;
+        font-size: 1rem;
+        letter-spacing: 0.01em;
+      }
+      .dep .runs { grid-area: runs; color: var(--board-soft); font-size: 0.9375rem; }
+      .dep .time {
+        grid-area: time;
+        font-family: var(--mono);
+        font-variant-numeric: tabular-nums;
+        color: var(--red-bright);
+        font-size: 0.9375rem;
+        justify-self: end;
+      }
+      .dep .status {
+        grid-area: status;
+        justify-self: end;
+        font-family: var(--mono);
+        font-size: 0.75rem;
+        letter-spacing: 0.08em;
+        color: var(--board-soft);
+      }
+      .board-cta { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1.5rem; }
+      .btn {
+        display: inline-block;
+        padding: 0.7rem 1.4rem;
+        border-radius: 999px;
+        font-weight: 700;
+        font-size: 0.9375rem;
+        text-decoration: none;
+        border: 1px solid transparent;
+      }
+      .btn-solid { background: var(--red); color: #fff; }
+      .btn-solid:hover { background: #8f1f18; color: #fff; }
+      .btn-ghost {
+        border-color: var(--board-rule);
+        color: var(--board-ink);
+        font-family: var(--mono);
+        font-weight: 400;
+        font-size: 0.875rem;
+      }
+      .btn-ghost:hover { border-color: var(--board-soft); color: #fff; }
+      /* Spec strip */
+      .spec {
+        margin-top: 1.25rem;
+        border: 1px solid var(--board-rule);
+        border-radius: 12px;
+        padding: 1.1rem 1.25rem;
+        min-height: 9.5rem;
+      }
+      .spec h2 {
+        margin: 0;
+        font-family: var(--mono);
+        font-size: 1rem;
+      }
+      .spec h2 .v { color: var(--red-bright); font-variant-numeric: tabular-nums; }
+      .spec dl {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 0.2rem 1rem;
+        margin: 0.75rem 0 0;
+        font-size: 0.9375rem;
+      }
+      .spec dt { color: var(--board-soft); font-family: var(--mono); font-size: 0.75rem; letter-spacing: 0.08em; padding-top: 0.25rem; }
+      .spec dd { margin: 0; }
+      .spec .add { font-family: var(--mono); font-size: 0.875rem; }
+      .spec .links { display: flex; flex-wrap: wrap; gap: 0.625rem; margin-top: 0.9rem; }
+      .spec .links a {
+        font-family: var(--mono);
+        font-size: 0.8125rem;
+        color: var(--board-ink);
+        text-decoration: none;
+        border: 1px solid var(--board-rule);
+        border-radius: 999px;
+        padding: 0.45rem 1.1rem;
+      }
+      .spec .links a:hover { border-color: var(--red-bright); color: #fff; }
+      /* Paper sections */
+      section.block { padding: 3.5rem 0 0; }
+      section.block h2 {
+        margin: 0 0 0.5rem;
+        font-size: clamp(1.5rem, 3vw, 2rem);
+        letter-spacing: -0.02em;
+        line-height: 1.2;
+        text-wrap: balance;
+      }
+      section.block > .wrap > p.standfirst {
+        margin: 0 0 1.5rem;
+        color: var(--ink-soft);
+        max-width: 68ch;
+      }
+      .tablist { display: flex; flex-wrap: wrap; gap: 0.625rem; margin-bottom: 1.1rem; }
+      .tab {
+        font-family: var(--mono);
+        font-size: 0.8125rem;
+        color: var(--ink);
+        background: transparent;
+        border: 1px solid var(--rule);
+        border-radius: 999px;
+        padding: 0.5rem 1.1rem;
+        cursor: pointer;
+      }
+      .tab:hover { border-color: var(--ink); }
+      .tab .pn { color: var(--red); font-weight: 700; }
+      .tab[aria-selected="true"] { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+      .tab[aria-selected="true"] .pn { color: var(--red-bright); }
+      figure.code[hidden] { display: none; }
+      .tok-k { color: var(--ink); font-weight: 700; }
+      .tok-s { color: #8f1f18; }
+      .tok-c { color: var(--ink-soft); font-style: italic; }
+      .tabsrc { margin: 1rem 0 0; color: var(--ink-soft); font-size: 0.875rem; }
+      figure.code {
+        margin: 0;
+        border: 1px solid var(--rule);
+        border-radius: 12px;
+        background: #fff;
+        box-shadow: 8px 12px 24px rgba(22, 32, 44, 0.1);
+        overflow: hidden;
+      }
+      figure.code figcaption {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.65rem 1rem;
+        border-bottom: 1px solid var(--rule);
+        font-family: var(--mono);
+        font-size: 0.8125rem;
+        color: var(--ink-soft);
+      }
+      figure.code figcaption .pn { color: var(--red); font-weight: 700; }
+      .copy {
+        font-family: var(--mono);
+        font-size: 0.75rem;
+        background: transparent;
+        border: 1px solid var(--rule);
+        border-radius: 999px;
+        padding: 0.3rem 0.8rem;
+        cursor: pointer;
+        color: var(--ink);
+      }
+      .copy:hover { border-color: var(--ink); }
+      figure.code pre {
+        margin: 0;
+        padding: 1.1rem 1.2rem 1.3rem;
+        overflow-x: auto;
+        font-family: var(--mono);
+        font-size: 0.8125rem;
+        line-height: 1.65;
+      }
+      figure.code pre code { font-variant-numeric: tabular-nums; }
+      /* Connection map */
+      .map {
+        border: 1px solid var(--rule);
+        border-radius: 12px;
+        background: #fff;
+        padding: 1.25rem;
+        box-shadow: 8px 12px 24px rgba(22, 32, 44, 0.1);
+      }
+      .map svg { display: block; width: 100%; height: auto; }
+      .map .node { font-family: var(--mono); font-size: 11px; fill: var(--ink); }
+      .map .edge { stroke: var(--ink); stroke-width: 1.5; }
+      .map .edge.hot { stroke: var(--red); stroke-width: 2.5; }
+      .map .stop { fill: #fff; stroke: var(--ink); stroke-width: 1.5; }
+      .map .stop.hot { fill: var(--red); stroke: var(--red); }
+      .map p { margin: 0.75rem 0 0; color: var(--ink-soft); font-size: 0.9375rem; }
+      /* Commands */
+      .cmds {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1.25rem;
+      }
+      .cmds pre {
+        margin: 0;
+        background: var(--board);
+        color: var(--board-ink);
+        border-radius: 12px;
+        padding: 1.1rem 1.2rem;
+        font-family: var(--mono);
+        font-size: 0.8125rem;
+        line-height: 1.7;
+        overflow-x: auto;
+        font-variant-numeric: tabular-nums;
+      }
+      .cmds pre .c { color: var(--board-soft); }
+      footer {
+        margin-top: 3.5rem;
+        border-top: 2px solid var(--ink);
+        padding: 1.5rem 0 2.5rem;
+        color: var(--ink-soft);
+        font-size: 0.875rem;
+      }
+      footer .wrap { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; justify-content: space-between; }
+      footer a { color: var(--ink); text-underline-offset: 4px; }
+      footer a:hover { color: var(--red); }
+      @media (max-width: 56rem) {
+        .masthead { flex-wrap: wrap; }
+        .masthead nav { gap: 1rem; }
+        .cmds { grid-template-columns: 1fr; }
+        .dep { grid-template-columns: 3rem 1fr; grid-template-areas: "plat pkg" "plat runs" "plat time"; }
+        .dep .time, .dep .status { justify-self: start; }
+        .dep .status { display: none; }
+        .spec { min-height: 0; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        html { scroll-behavior: auto; }
+        * { transition: none !important; }
+      }
+      .dep, .spec, .map .edge, .map .stop { transition: background 180ms ease-out, border-color 180ms ease-out, stroke 180ms ease-out, fill 180ms ease-out; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="masthead">
+        <p class="wordmark">The Forge <span class="rule-red">/</span> Ecosystem</p>
+        <nav aria-label="Primary">
+          <a href="#departures">Packages</a>
+          <a href="#platforms">Code</a>
+          <a href="#origin">Origin</a>
+          <a href="/guides/">Guides</a>
+          <a href="https://github.com/albetnov/the_forge_ecosystem">GitHub</a>
+        </nav>
+      </div>
+    </div>
+
+    <div class="wrap">
+      <div class="board" id="departures">
+        <h1>Four packages. One timetable. <span class="t-red">No hidden policy.</span></h1>
+        <p class="lede">
+          The Forge Ecosystem is a set of small, typed Dart and Flutter packages built as
+          value types. Pick a line below: each row is a package, its run, and the exact
+          version now standing at the platform.
+        </p>
+        <ol class="departures" id="board">
+          {
+            lines.map((l, i) => (
+              <li>
+                <button
+                  class="dep"
+                  data-line={l.id}
+                  aria-pressed={i === 0 ? "true" : "false"}
+                >
+                  <span class="plat">{l.platform}</span>
+                  <span class="pkg">{l.pkg}</span>
+                  <span class="time">{l.version}</span>
+                  <span class="runs">{l.runs}</span>
+                  <span class="status">{l.short}</span>
+                </button>
+              </li>
+            ))
+          }
+        </ol>
+        <div class="spec" aria-live="polite">
+          <h2 id="spec-pkg">fetch_forge <span class="v">0.1.0</span></h2>
+          <dl>
+            <dt>Runs</dt><dd id="spec-runs">Remote data behind signals</dd>
+            <dt>Provides</dt><dd id="spec-provides">Query · Mutation · QueryBuilder · QueryScope</dd>
+            <dt>Depends</dt><dd id="spec-depends">Standalone · pairs with package:signals</dd>
+            <dt>Board</dt><dd class="add" id="spec-add">dart pub add fetch_forge</dd>
+          </dl>
+          <div class="links" id="spec-links"></div>
+        </div>
+        <div class="board-cta">
+          <a class="btn btn-solid" href="#platforms">See the code</a>
+          <a class="btn btn-ghost" href="https://github.com/albetnov/the_forge_ecosystem">Open the monorepo on GitHub</a>
+        </div>
+      </div>
+    </div>
+
+    <section class="block" id="platforms" aria-labelledby="platforms-h">
+      <div class="wrap">
+        <h2 id="platforms-h">Four lines, four excerpts</h2>
+        <p class="standfirst">
+          One excerpt per package, quoted from its README. Tabs switch lines;
+          copy takes the visible excerpt.
+        </p>
+        <div class="tablist" role="tablist" aria-label="Package code excerpts">
+          <button role="tab" class="tab" id="tab-fetch" aria-controls="panel-fetch" aria-selected="true" data-tab="fetch"><span class="pn">P1</span> fetch_forge</button>
+          <button role="tab" class="tab" id="tab-schema" aria-controls="panel-schema" aria-selected="false" data-tab="schema" tabindex="-1"><span class="pn">P2</span> sqlite_schema_forge</button>
+          <button role="tab" class="tab" id="tab-query" aria-controls="panel-query" aria-selected="false" data-tab="query" tabindex="-1"><span class="pn">P3</span> sqlite_query_forge</button>
+          <button role="tab" class="tab" id="tab-driver" aria-controls="panel-driver" aria-selected="false" data-tab="driver" tabindex="-1"><span class="pn">P4</span> sqlite3_driver_forge</button>
+        </div>
+        <figure class="code" role="tabpanel" id="panel-fetch" aria-labelledby="tab-fetch">
+          <figcaption><span>one line wires the fetch</span><button class="copy" data-copy="code-fetch">Copy</button></figcaption>
+          <pre><code id="code-fetch" set:html={highlight(fetchSnippet)} /></pre>
+        </figure>
+        <figure class="code" role="tabpanel" id="panel-schema" aria-labelledby="tab-schema" hidden>
+          <figcaption><span>desired state, declared</span><button class="copy" data-copy="code-schema">Copy</button></figcaption>
+          <pre><code id="code-schema" set:html={highlight(schemaSnippet)} /></pre>
+        </figure>
+        <figure class="code" role="tabpanel" id="panel-query" aria-labelledby="tab-query" hidden>
+          <figcaption><span>filters compose immutably</span><button class="copy" data-copy="code-query">Copy</button></figcaption>
+          <pre><code id="code-query" set:html={highlight(querySnippet)} /></pre>
+        </figure>
+        <figure class="code" role="tabpanel" id="panel-driver" aria-labelledby="tab-driver" hidden>
+          <figcaption><span>one instance serves both contracts</span><button class="copy" data-copy="code-driver">Copy</button></figcaption>
+          <pre><code id="code-driver" set:html={highlight(driverSnippet)} /></pre>
+        </figure>
+        <p class="tabsrc">Excerpts abridged from the package READMEs, which stay authoritative.</p>
+      </div>
+    </section>
+
+    <section class="block" aria-labelledby="map-h">
+      <div class="wrap">
+        <h2 id="map-h">The connection map</h2>
+        <p class="standfirst">
+          The SQLite chain runs <em>schema → query → driver</em>; <em>fetch_forge</em>{" "}
+          stands alone. Select a departure above and its stops light up here.
+        </p>
+        <div class="map">
+          <svg viewBox="0 0 640 190" role="img" aria-label="Dependency map: schema to query to driver, fetch standalone">
+            <line class="edge" data-edge="sqlite" x1="150" y1="95" x2="320" y2="95" />
+            <line class="edge" data-edge="sqlite" x1="360" y1="95" x2="490" y2="95" />
+            <line class="edge" data-edge="fetch" x1="60" y1="150" x2="580" y2="150" stroke-dasharray="5 6" />
+            <g>
+              <circle class="stop" data-stop="schema" cx="130" cy="95" r="9" />
+              <text class="node" x="130" y="125" text-anchor="middle">P2 schema</text>
+            </g>
+            <g>
+              <circle class="stop" data-stop="query" cx="340" cy="95" r="9" />
+              <text class="node" x="340" y="125" text-anchor="middle">P3 query</text>
+            </g>
+            <g>
+              <circle class="stop" data-stop="driver" cx="510" cy="95" r="9" />
+              <text class="node" x="510" y="125" text-anchor="middle">P4 driver</text>
+            </g>
+            <g>
+              <circle class="stop" data-stop="fetch" cx="60" cy="150" r="9" />
+              <text class="node" x="60" y="178" text-anchor="start">P1 fetch · standalone</text>
+            </g>
+            <text class="node" x="235" y="80" text-anchor="middle">Table · Column</text>
+            <text class="node" x="425" y="80" text-anchor="middle">ForgeExecutor</text>
+          </svg>
+          <p id="map-caption">Showing: fetch_forge · standalone, pairs with package:signals.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="origin" aria-labelledby="origin-h">
+      <div class="wrap">
+        <h2 id="origin-h">Opened from working projects</h2>
+        <p class="standfirst">
+          These packages began as internal project code. They were extracted,
+          typed, and published so every project depends on the same open
+          packages: no private forks, no hidden extras. The code you add to
+          your deps is the code that runs in real projects.
+        </p>
+      </div>
+    </section>
+
+    <section class="block" aria-labelledby="cmds-h">
+      <div class="wrap">
+        <h2 id="cmds-h">Boarding commands</h2>
+        <p class="standfirst">Install from pub.dev, or work the monorepo with melos.</p>
+        <div class="cmds">
+          <pre><code><span class="c"># ride any line</span>
+dart pub add fetch_forge
+dart pub add sqlite_schema_forge
+dart pub add sqlite_query_forge
+dart pub add sqlite3_driver_forge</code></pre>
+          <pre><code><span class="c"># work the whole timetable</span>
+melos bootstrap   # pub get everywhere
+melos run analyze # dart analyze, all packages
+melos run test    # dart + flutter tests</code></pre>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      <div class="wrap">
+        <span>This page summarizes the package READMEs, which stay authoritative.</span>
+        <span><a href="https://github.com/albetnov/the_forge_ecosystem">Monorepo</a> · <a href="https://github.com/albetnov/the_forge_ecosystem/blob/main/LICENSE">MIT</a> · <a href="https://pub.dev/packages/fetch_forge">pub.dev</a></span>
+      </div>
+    </footer>
+
+    <script id="lines-data" type="application/json" set:html={JSON.stringify(lines)} />
+    <script>
+      const LINES = JSON.parse(document.getElementById("lines-data").textContent);
+      const deps = document.querySelectorAll(".dep");
+      const pkg = document.getElementById("spec-pkg");
+      const runs = document.getElementById("spec-runs");
+      const provides = document.getElementById("spec-provides");
+      const depends = document.getElementById("spec-depends");
+      const add = document.getElementById("spec-add");
+      const links = document.getElementById("spec-links");
+      const caption = document.getElementById("map-caption");
+      const captions = {
+        fetch: "Showing: fetch_forge · standalone, pairs with package:signals.",
+        schema: "Showing: sqlite_schema_forge · origin of the chain, feeds P3 and P4.",
+        query: "Showing: sqlite_query_forge · via P2 schema types, feeds P4.",
+        driver: "Showing: sqlite3_driver_forge · via P2 and P3, serves both executor contracts.",
+      };
+      function select(id) {
+        const line = LINES.find((l) => l.id === id);
+        if (!line) return;
+        deps.forEach((b) => b.setAttribute("aria-pressed", b.dataset.line === id ? "true" : "false"));
+        pkg.innerHTML = "";
+        pkg.append(line.pkg + " ");
+        const v = document.createElement("span");
+        v.className = "v";
+        v.textContent = line.version;
+        pkg.append(v);
+        runs.textContent = line.runs;
+        provides.textContent = line.provides;
+        depends.textContent = line.depends;
+        add.textContent = line.add;
+        links.innerHTML = "";
+        line.links.forEach((l) => {
+          const a = document.createElement("a");
+          a.href = l.href;
+          a.textContent = l.label;
+          links.append(a);
+        });
+        caption.textContent = captions[id];
+        document.querySelectorAll("[data-stop]").forEach((s) => {
+          const on =
+            id === "fetch" ? s.dataset.stop === "fetch" :
+            id === "schema" ? (s.dataset.stop === "schema" || s.dataset.stop === "query" || s.dataset.stop === "driver") :
+            id === "query" ? (s.dataset.stop === "query" || s.dataset.stop === "driver") :
+            s.dataset.stop === "driver";
+          s.classList.toggle("hot", on);
+        });
+        document.querySelectorAll("[data-edge]").forEach((e) => {
+          e.classList.toggle("hot", id !== "fetch" && e.dataset.edge === "sqlite");
+        });
+      }
+      deps.forEach((b) => b.addEventListener("click", () => select(b.dataset.line)));
+      const tabs = Array.from(document.querySelectorAll('[role="tab"]'));
+      function showTab(id, focus) {
+        tabs.forEach((t) => {
+          const on = t.dataset.tab === id;
+          t.setAttribute("aria-selected", on ? "true" : "false");
+          t.tabIndex = on ? 0 : -1;
+          document.getElementById("panel-" + t.dataset.tab).hidden = !on;
+          if (on && focus) t.focus();
+        });
+      }
+      tabs.forEach((t) => t.addEventListener("click", () => showTab(t.dataset.tab, false)));
+      document.querySelector(".tablist").addEventListener("keydown", (e) => {
+        if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+        e.preventDefault();
+        const i = tabs.findIndex((t) => t.getAttribute("aria-selected") === "true");
+        const n = (i + (e.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length;
+        showTab(tabs[n].dataset.tab, true);
+      });
+      document.querySelectorAll(".copy").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const el = document.getElementById(btn.dataset.copy);
+          const done = () => {
+            btn.textContent = "Copied";
+            setTimeout(() => (btn.textContent = "Copy"), 1600);
+          };
+          try {
+            await navigator.clipboard.writeText(el.textContent);
+            done();
+          } catch {
+            const r = document.createRange();
+            r.selectNodeContents(el);
+            const s = getSelection();
+            s.removeAllRanges();
+            s.addRange(r);
+            done();
+          }
+        });
+      });
+      select("fetch");
+    </script>
+  </body>
+</html>
