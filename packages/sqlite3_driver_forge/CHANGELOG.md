@@ -1,3 +1,8 @@
+## 0.1.1
+
+- Widens `sqlite_query_forge` to `^0.2.0` (`CaseWhen`, `MATCH`, `Lit`). No API
+  change in this package.
+
 ## 0.1.0
 
 - Initial release in the `the_forge_ecosystem` monorepo (reset from prior
