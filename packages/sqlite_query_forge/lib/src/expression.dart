@@ -551,6 +551,73 @@ final class InList extends Expression {
   }
 }
 
+/// One `WHEN <condition> THEN <result>` arm of a [CaseWhen].
+///
+/// The [condition] renders as SQL; the [result] follows the existing rule —
+/// an [Expression] renders as a reference, anything else binds as `?`.
+final class WhenBranch {
+  /// The `WHEN` predicate.
+  final Expression condition;
+
+  /// The `THEN` value: a reference when an [Expression], a bound `?` otherwise.
+  final Object? result;
+
+  /// Builds one `WHEN` arm from [condition] and [result].
+  const WhenBranch(this.condition, this.result);
+}
+
+/// `CASE WHEN <cond> THEN <result> ... ELSE <else> END`.
+///
+/// Conditions render as expressions. Each result (and [orElse]) renders as a
+/// reference when it is an [Expression] and binds as `?` otherwise, so
+/// `SUM(CASE WHEN ... THEN "amount" ELSE 0 END)` binds only the `0`. A `null`
+/// [orElse] omits the `ELSE` clause, which SQLite treats as `ELSE NULL`.
+final class CaseWhen extends Expression {
+  /// The ordered `WHEN` arms.
+  final List<WhenBranch> branches;
+
+  /// The `ELSE` value, omitted when `null`.
+  final Object? orElse;
+
+  /// Builds a `CASE` over [branches] with an optional [orElse].
+  CaseWhen(this.branches, [this.orElse]) {
+    if (branches.isEmpty) {
+      throw ArgumentError.value(
+        branches,
+        'branches',
+        'CaseWhen needs at least one WHEN branch.',
+      );
+    }
+  }
+
+  @override
+  void writeTo(SqlFragment fragment) {
+    fragment.write('CASE');
+    for (var i = 0; i < branches.length; i++) {
+      final branch = branches[i];
+      fragment.write(' WHEN ');
+      branch.condition.writeTo(fragment);
+      fragment.write(' THEN ');
+      final result = branch.result;
+      if (result is Expression) {
+        result.writeTo(fragment);
+      } else {
+        fragment.bind(result);
+      }
+    }
+    final fallback = orElse;
+    if (fallback != null) {
+      fragment.write(' ELSE ');
+      if (fallback is Expression) {
+        fallback.writeTo(fragment);
+      } else {
+        fragment.bind(fallback);
+      }
+    }
+    fragment.write(' END');
+  }
+}
+
 /// Emitted verbatim. Only safe for trusted, static SQL.
 final class RawSql extends Expression {
   /// The SQL text emitted verbatim.

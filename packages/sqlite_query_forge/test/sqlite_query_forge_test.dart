@@ -391,6 +391,102 @@ void main() {
     });
   });
 
+  group('case when', () {
+    test('single WHEN with bound result and ELSE binds both in order', () {
+      final q = SelectStatement(
+        columns: [
+          CaseWhen([
+            WhenBranch(id.eq(1), 10),
+          ], 0),
+        ],
+      ).compile();
+      expect(q.sql, 'SELECT CASE WHEN "id" = ? THEN ? ELSE ? END');
+      expect(q.args, [1, 10, 0]);
+    });
+
+    test('an Expression result renders as a reference and binds nothing', () {
+      final q = SelectStatement(
+        columns: [
+          CaseWhen([
+            WhenBranch(id.eq(1), amount),
+          ], 0),
+        ],
+      ).compile();
+      expect(q.sql, 'SELECT CASE WHEN "id" = ? THEN "amount" ELSE ? END');
+      expect(q.args, [1, 0]);
+    });
+
+    test('multiple WHENs keep textual order with args in order', () {
+      final q = SelectStatement(
+        columns: [
+          CaseWhen([
+            WhenBranch(id.eq(1), 'a'),
+            WhenBranch(name.eq('x'), 'b'),
+          ], 'c'),
+        ],
+      ).compile();
+      expect(
+        q.sql,
+        'SELECT CASE WHEN "id" = ? THEN ? WHEN "name" = ? THEN ? ELSE ? END',
+      );
+      expect(q.args, [1, 'a', 'x', 'b', 'c']);
+    });
+
+    test('a null orElse omits ELSE, which SQLite treats as ELSE NULL', () {
+      final q = SelectStatement(
+        columns: [
+          CaseWhen([
+            WhenBranch(id.eq(1), amount),
+          ]),
+        ],
+      ).compile();
+      expect(q.sql, 'SELECT CASE WHEN "id" = ? THEN "amount" END');
+      expect(q.args, [1]);
+    });
+
+    test('an Expression orElse renders as a reference', () {
+      final q = SelectStatement(
+        columns: [
+          CaseWhen([WhenBranch(id.eq(1), 10)], amount),
+        ],
+      ).compile();
+      expect(q.sql, 'SELECT CASE WHEN "id" = ? THEN ? ELSE "amount" END');
+      expect(q.args, [1, 10]);
+    });
+
+    test('bool results bind as 1/0 like every other bound value', () {
+      final q = SelectStatement(
+        columns: [
+          CaseWhen([WhenBranch(isActive.eq(true), true)], false),
+        ],
+      ).compile();
+      expect(
+        q.sql,
+        'SELECT CASE WHEN "is_active" = ? THEN ? ELSE ? END',
+      );
+      expect(q.args, [1, 1, 0]);
+    });
+
+    test('composes inside SUM with an alias, the monthIncome shape', () {
+      final q = SelectStatement(
+        columns: [
+          Aggregate('SUM', [
+            CaseWhen([WhenBranch(id.eq(1), amount)], 0),
+          ]).alias('total'),
+        ],
+      ).compile();
+      expect(
+        q.sql,
+        'SELECT SUM(CASE WHEN "id" = ? THEN "amount" ELSE ? END) AS "total"',
+      );
+      expect(q.args, [1, 0]);
+    });
+
+    test('empty branches throw rather than emitting invalid SQL', () {
+      expect(() => CaseWhen([]), throwsArgumentError);
+    });
+  });
+
   group('logical composition', () {
     test('AND binds both sides in order', () {
       final q = SelectStatement(where: Conjunction(id.eq(1), name.eq('a')))
@@ -763,6 +859,7 @@ void main() {
         Parenthesized() => 'paren',
         Aliased() => 'aliased',
         Collated() => 'collated',
+        CaseWhen() => 'case when',
         RawSql() => 'raw',
         JsonObject() => 'json object',
         Aggregate() => 'aggregate',
