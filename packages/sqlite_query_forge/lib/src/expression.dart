@@ -163,6 +163,9 @@ final class Column<T extends Object> extends Expression {
   /// You write the `%` wildcards; the pattern stays bound.
   Expression like(T pattern) => Comparison(this, CompareOp.like, pattern);
 
+  /// An FTS5 query; the pattern stays bound.
+  Expression match(String query) => Comparison(this, CompareOp.match, query);
+
   /// `"name" IS NULL`.
   Expression get isNull => NullCheck(this, negated: false);
 
@@ -247,6 +250,9 @@ extension QualifiedColumnOps<T extends Object> on QualifiedColumn<T> {
   /// You write the `%` wildcards; the pattern stays bound.
   Expression like(T pattern) => Comparison(this, CompareOp.like, pattern);
 
+  /// An FTS5 query; the pattern stays bound.
+  Expression match(String query) => Comparison(this, CompareOp.match, query);
+
   /// `"table"."name" BETWEEN ? AND ?` with both bounds bound.
   Expression between(T lower, T upper) =>
       Between(this, CompareOp.between, lower, upper);
@@ -309,6 +315,9 @@ enum CompareOp {
   /// `LIKE`.
   like('LIKE'),
 
+  /// `MATCH`, for FTS5 full-text queries.
+  match('MATCH'),
+
   /// `BETWEEN`.
   between('BETWEEN'),
 
@@ -369,6 +378,9 @@ extension ExpressionOps on Expression {
 
   /// `left <= ?`, or a reference comparison when [value] is an [Expression].
   Expression lte(Object? value) => _comparison(this, CompareOp.lte, value);
+
+  /// An FTS5 query; the pattern stays bound.
+  Expression match(String query) => Comparison(this, CompareOp.match, query);
 }
 
 /// [name] is emitted unquoted, so only use fixed names.

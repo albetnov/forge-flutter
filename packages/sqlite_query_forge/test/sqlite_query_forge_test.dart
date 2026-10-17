@@ -107,6 +107,35 @@ void main() {
       expect(q.sql, 'SELECT * WHERE "name" LIKE ?');
       expect(q.args, ['%ada%']);
     });
+
+    test('match binds the FTS5 pattern', () {
+      final q = SelectStatement(where: name.match('ada*')).compile();
+      expect(q.sql, 'SELECT * WHERE "name" MATCH ?');
+      expect(q.args, ['ada*']);
+    });
+
+    test('match on a qualified column renders the qualified reference', () {
+      const qualified = QualifiedColumn<String>('u', 'name');
+      final q = SelectStatement(where: qualified.match('ada*')).compile();
+      expect(q.sql, 'SELECT * WHERE "u"."name" MATCH ?');
+      expect(q.args, ['ada*']);
+    });
+
+    test('match on any expression renders the expression', () {
+      final q = SelectStatement(
+        where: FunctionCall('lower', [name]).match('ada*'),
+      ).compile();
+      expect(q.sql, 'SELECT * WHERE lower("name") MATCH ?');
+      expect(q.args, ['ada*']);
+    });
+
+    test('a hostile match pattern stays bound, never inlined', () {
+      final q = SelectStatement(
+        where: name.match('x\' OR \'1\'=\'1'),
+      ).compile();
+      expect(q.sql, 'SELECT * WHERE "name" MATCH ?');
+      expect(q.args, ['x\' OR \'1\'=\'1']);
+    });
   });
 
   group('boolean columns', () {

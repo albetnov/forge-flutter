@@ -24,7 +24,7 @@ JsonObject({'id': users.id}).alias('user')
 | Node | Use |
 | --- | --- |
 | `Column.id/.integer/.text/.dateTime/.real/.blob` (+ plain `Column(name)`) | Reference + DDL flags. Plain constructor has `type: null` → un-migratable (see schema-bridge). `dateTime` is `TEXT`; `RawSql` default verbatim, `String` default quoted. |
-| Comparisons `eq/neq/gt/gte/lt/lte/like/between/notBetween/inList/notIn/isNull/isNotNull` | On `Column`, `QualifiedColumn`, and (widened `Object?`) `ExpressionOps`. `like` callers add `%` themselves. |
+| Comparisons `eq/neq/gt/gte/lt/lte/like/match/between/notBetween/inList/notIn/isNull/isNotNull` | On `Column`, `QualifiedColumn`, and (widened `Object?`) `ExpressionOps`. `like` callers add `%` themselves. `match` takes a `String` FTS5 query and binds it (`<left> MATCH ?`). |
 | `sameAs(other)` / passing an `Expression` as the value to `eq/...` | Column-to-column: renders reference, binds nothing (`RefComparison`). Bare `Column` works, no bridge needed. |
 | Aggregates `count/countDistinct/sum/avg/min/max`, `FunctionCall`, `JsonObject`, `Collated`, `Negation`, `parenthesized`, `alias` | `JsonObject` keys are string literals, values are expressions; duplicate map keys collapse. `FunctionCall.name` is unquoted — fixed names only. |
 | `CaseWhen(branches, [orElse])` + `WhenBranch(condition, result)` | `CASE WHEN <cond> THEN <result> ... ELSE <else> END`. Conditions render as expressions; results/`orElse` render as references when `Expression`, else bind as `?`. Null `orElse` omits `ELSE`. Composes inside `SUM(...)` for conditional aggregates. |
