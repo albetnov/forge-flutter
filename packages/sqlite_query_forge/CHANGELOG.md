@@ -1,3 +1,8 @@
+## 0.3.0
+
+- `Column.text` takes `primaryKey`, matching `Column.integer` — for TEXT
+  primary keys such as a settings `key`.
+
 ## 0.2.0
 
 - `CaseWhen` / `WhenBranch`: `CASE WHEN <cond> THEN <result> ... ELSE <else>

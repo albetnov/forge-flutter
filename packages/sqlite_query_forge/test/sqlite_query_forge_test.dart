@@ -292,6 +292,16 @@ void main() {
       expect(identical(const Column('x'), const Column('x')), isTrue);
     });
 
+    test('text carries an optional primary key flag', () {
+      const key = Column.text('key', primaryKey: true, nullable: false);
+      expect(key.type, ColumnType.text);
+      expect(key.primaryKey, isTrue);
+      expect(
+        sqlOf(SelectStatement(where: key.eq('a'))),
+        'SELECT * WHERE "key" = ?',
+      );
+    });
+
     test('the flags change nothing about how it renders', () {
       expect(
         sqlOf(SelectStatement(columns: [const Column.id()])),

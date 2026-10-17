@@ -96,15 +96,17 @@ final class Column<T extends Object> extends Expression {
          referencesColumn: referencesColumn,
        );
 
-  /// `TEXT`, with an optional unique constraint and default.
+  /// `TEXT`, with an optional primary key, unique constraint and default.
   const Column.text(
     String name, {
+    bool primaryKey = false,
     bool nullable = true,
     bool unique = false,
     Object? defaultValue,
   }) : this(
          name,
          type: ColumnType.text,
+         primaryKey: primaryKey,
          nullable: nullable,
          unique: unique,
          defaultValue: defaultValue,

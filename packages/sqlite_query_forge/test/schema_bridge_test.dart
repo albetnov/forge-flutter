@@ -159,6 +159,17 @@ void main() {
       );
     });
 
+    test('a TEXT primary key bridges with its flag', () {
+      const settings = DeclaredTable('app_settings', [
+        Column.text('key', primaryKey: true, nullable: false),
+      ]);
+      expect(
+        settings.toSchemaTable().toCreateTableSql(),
+        'CREATE TABLE IF NOT EXISTS "app_settings" '
+        '("key" TEXT PRIMARY KEY NOT NULL);',
+      );
+    });
+
     test('carries the table name and the columns', () {
       final schemaTable = users.toSchemaTable();
       expect(schemaTable.name, 'users');
