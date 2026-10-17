@@ -3,22 +3,27 @@
 library;
 
 import 'clause.dart';
-import 'expression.dart';
 import 'executor.dart';
+import 'expression.dart';
 import 'schema.dart';
 import 'statement.dart';
 
+/// Base for a typed table schema.
 abstract class Table<T extends Object> {
   /// Named `tableName` so subclasses are free to declare `Column` getters
   /// such as `name` without colliding.
   final String tableName;
 
+  /// Builds a [T] from a raw result row.
   final T Function(Map<String, Object?> row) mapper;
 
+  /// Binds this table to [tableName] and its row [mapper].
   const Table(this.tableName, {required this.mapper});
 
+  /// A `FROM` source for this table.
   TableSource get source => TableSource(tableName);
 
+  /// A `FROM` source for this table, aliased as [alias] when given.
   TableSource sourceAs([String? alias]) => TableSource(tableName, alias);
 
   /// Qualifies [column] against this table, or its [alias].
@@ -27,6 +32,7 @@ abstract class Table<T extends Object> {
     String? alias,
   ]) => QualifiedColumn<R>(alias ?? tableName, column.name);
 
+  /// Maps raw result [rows] through the table mapper.
   List<T> mapRows(List<Map<String, Object?>> rows) =>
       rows.map(mapper).toList(growable: false);
 
@@ -94,12 +100,14 @@ MigrationSchema schemaOf({
 /// An immutable, chainable query. [T] is the *result* type, and only [map]
 /// changes it.
 final class SelectBuilder<T extends Object> {
+  /// The statement this builder wraps.
   final SelectStatement statement;
 
   final T Function(Map<String, Object?> row)? _mapper;
 
   final ForgeExecutor? _executor;
 
+  /// Wraps [statement] with an optional row mapper and executor.
   SelectBuilder(this.statement, [this._mapper, this._executor]);
 
   /// Alias needed because a bare `COUNT(*)` is keyed by its own expression
@@ -125,14 +133,17 @@ final class SelectBuilder<T extends Object> {
 
   // ---- projections -------------------------------------------------------
 
+  /// Replaces the projection with [columns].
   SelectBuilder<T> select(List<Expression> columns) =>
       _derive(statement.copyWith(columns: List<Expression>.of(columns)));
 
+  /// Selects distinct rows when [value] is true.
   SelectBuilder<T> distinct({bool value = true}) =>
       _derive(statement.copyWith(distinct: value));
 
   // ---- filters -----------------------------------------------------------
 
+  /// Restricts rows to those matching [condition].
   SelectBuilder<T> where(Expression condition) =>
       _derive(statement.copyWith(where: condition));
 
@@ -160,6 +171,7 @@ final class SelectBuilder<T extends Object> {
 
   // ---- grouping ----------------------------------------------------------
 
+  /// Groups rows by [expressions].
   SelectBuilder<T> groupBy(List<Expression> expressions) {
     if (expressions.isEmpty) {
       throw StateError('groupBy() needs at least one expression.');
@@ -167,6 +179,7 @@ final class SelectBuilder<T extends Object> {
     return _derive(statement.copyWith(groupBy: Grouping(expressions)));
   }
 
+  /// Filters grouped rows with [condition].
   SelectBuilder<T> having(Expression condition) {
     final grouping = statement.groupBy;
     if (grouping == null) {
@@ -193,20 +206,25 @@ final class SelectBuilder<T extends Object> {
     ),
   );
 
+  /// Limits the result to [count] rows.
   SelectBuilder<T> limit(int count) =>
       _derive(statement.copyWith(limit: count));
 
+  /// Skips the first [count] rows.
   SelectBuilder<T> offset(int count) =>
       _derive(statement.copyWith(offset: count));
 
   // ---- joins -------------------------------------------------------------
 
+  /// Inner-joins [source] on [on].
   SelectBuilder<T> join(Source source, {required Expression on}) =>
       _join(JoinKind.inner, source, on);
 
+  /// Left-joins [source] on [on].
   SelectBuilder<T> leftJoin(Source source, {required Expression on}) =>
       _join(JoinKind.left, source, on);
 
+  /// Cross-joins [source].
   SelectBuilder<T> crossJoin(Source source) =>
       _join(JoinKind.cross, source, null);
 
@@ -222,6 +240,7 @@ final class SelectBuilder<T extends Object> {
   /// The compiled SQL, no executor required.
   CompiledQuery compile() => statement.compile();
 
+  /// Runs the query and maps every row.
   Future<List<T>> getMany() async {
     final rows = await _run();
     final mapper = _mapper;
