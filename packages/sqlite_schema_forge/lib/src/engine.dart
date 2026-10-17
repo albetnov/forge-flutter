@@ -3,19 +3,29 @@ import 'package:sqlite_schema_forge/src/plan.dart';
 import 'package:sqlite_schema_forge/src/schema.dart';
 import 'package:sqlite_schema_forge/src/schema_differ.dart';
 
+/// Version-to-version hook run inside the migration transaction for data
+/// fixes. Receives the transaction's [db] and the `fromVersion`/`toVersion`
+/// range being crossed.
 typedef MigrationCallback = Future<void> Function(
   DatabaseExecutor db,
   int fromVersion,
   int toVersion,
 );
 
+/// Outcome of a migration: whether anything [migrated] and which SQL ran.
 final class MigrationResult {
+  /// Whether any step ran; `false` when the schema was already up to date.
   final bool migrated;
+
+  /// The SQL statements that were executed, in order.
   final List<String> executedSql;
 
+  /// Creates a result with the given [migrated] flag and [executedSql].
   const MigrationResult({required this.migrated, required this.executedSql});
 }
 
+/// Declarative schema migrator: diff a target [Schema] against a live
+/// database, then apply the resulting [MigrationPlan].
 final class SqliteSchemaForge {
   /// Enables Foreign Keys on SQLite Connection
   static Future<void> enableForeignKeys(DatabaseExecutor db) async {
