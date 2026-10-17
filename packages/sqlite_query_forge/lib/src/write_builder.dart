@@ -1,6 +1,6 @@
 import 'clause.dart';
-import 'expression.dart';
 import 'executor.dart';
+import 'expression.dart';
 import 'statement.dart';
 
 /// `AND` binds tighter than `OR`, so a disjunction needs parens before it is
@@ -26,6 +26,7 @@ int _asRowid(Object? value) => switch (value) {
 
 /// An `INSERT` chain. Immutable, so a chain can be built conditionally.
 final class InsertBuilder {
+  /// The table rows are inserted into.
   final TableSource target;
 
   final ForgeExecutor? _executor;
@@ -36,6 +37,7 @@ final class InsertBuilder {
 
   final List<Expression>? _returning;
 
+  /// Binds the builder to [target], optionally with an executor.
   InsertBuilder(this.target, [this._executor])
     : _rows = const [],
       _onConflict = null,
@@ -62,6 +64,7 @@ final class InsertBuilder {
     returning: _returning,
   );
 
+  /// Turns conflicts into `ON CONFLICT DO NOTHING`.
   InsertBuilder onConflictIgnore() => InsertBuilder._(
     target,
     _executor,
@@ -98,6 +101,7 @@ final class InsertBuilder {
         returning: List.of(columns),
       );
 
+  /// The compiled `INSERT`.
   CompiledQuery compile() => _statement().compile();
 
   /// The new rowid.
@@ -110,6 +114,7 @@ final class InsertBuilder {
     return executor.insert(compiled.sql, compiled.args);
   }
 
+  /// Runs a returning insert and reads the inserted rows.
   Future<List<Map<String, Object?>>> getMany() {
     if (_returning == null) {
       throw StateError('Call returning() before reading inserted rows.');
@@ -165,6 +170,7 @@ final class InsertBuilder {
 
 /// An `UPDATE` chain. Immutable, so a chain can be built conditionally.
 final class UpdateBuilder {
+  /// The table being updated.
   final TableSource target;
 
   final ForgeExecutor? _executor;
@@ -175,6 +181,7 @@ final class UpdateBuilder {
 
   final List<Expression>? _returning;
 
+  /// Binds the builder to [target], optionally with an executor.
   UpdateBuilder(this.target, [this._executor])
     : _values = const {},
       _where = null,
@@ -244,6 +251,7 @@ final class UpdateBuilder {
         returning: List.of(columns),
       );
 
+  /// The compiled `UPDATE`.
   CompiledQuery compile() =>
       UpdateStatement(target, _values, _where, _returning).compile();
 
@@ -257,6 +265,7 @@ final class UpdateBuilder {
     return executor.execute(compiled.sql, compiled.args);
   }
 
+  /// Runs a returning update and reads the affected rows.
   Future<List<Map<String, Object?>>> getMany() {
     if (_returning == null) {
       throw StateError('Call returning() before reading updated rows.');
@@ -269,6 +278,7 @@ final class UpdateBuilder {
 
 /// A `DELETE` chain. Immutable, so a chain can be built conditionally.
 final class DeleteBuilder {
+  /// The table rows are deleted from.
   final TableSource target;
 
   final ForgeExecutor? _executor;
@@ -277,6 +287,7 @@ final class DeleteBuilder {
 
   final List<Expression>? _returning;
 
+  /// Binds the builder to [target], optionally with an executor.
   DeleteBuilder(this.target, [this._executor])
     : _where = null,
       _returning = null;
@@ -321,6 +332,7 @@ final class DeleteBuilder {
         returning: List.of(columns),
       );
 
+  /// The compiled `DELETE`.
   CompiledQuery compile() =>
       DeleteStatement(target, _where, _returning).compile();
 
@@ -334,6 +346,7 @@ final class DeleteBuilder {
     return executor.execute(compiled.sql, compiled.args);
   }
 
+  /// Runs a returning delete and reads the affected rows.
   Future<List<Map<String, Object?>>> getMany() {
     if (_returning == null) {
       throw StateError('Call returning() before reading deleted rows.');
