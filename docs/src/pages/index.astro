@@ -584,6 +584,37 @@ function highlight(src) {
       </div>
     </div>
 
+    <section class="block" id="agent" aria-labelledby="agent-h">
+      <div class="wrap">
+        <h2 id="agent-h">Boarding with an agent</h2>
+        <p class="standfirst">
+          Hand your coding agent this work order instead of wiring the packages
+          up yourself. It reads the project before it changes anything, asks
+          before it replaces a layer you already run, and installs from pub.dev.
+          Fill the{" "}
+          <span class="slot">&lt;usage&gt;</span> slot with a line, or leave it
+          and the agent asks which ones you want.
+        </p>
+        <div class="tablist" role="group" aria-label="Requested usage">
+          <button class="tab" type="button" data-usage="" aria-pressed="true"><span class="slot">&lt;usage&gt;</span> ask me</button>
+          <button class="tab" type="button" data-usage="fetch" aria-pressed="false">fetch</button>
+          <button class="tab" type="button" data-usage="schema" aria-pressed="false">schema</button>
+          <button class="tab" type="button" data-usage="query" aria-pressed="false">query</button>
+          <button class="tab" type="button" data-usage="driver" aria-pressed="false">driver</button>
+          <button class="tab" type="button" data-usage="sqlite" aria-pressed="false">sqlite</button>
+        </div>
+        <figure class="code">
+          <figcaption><span>work order for your agent</span><button class="copy" data-copy="code-agent">Copy prompt</button></figcaption>
+          <pre class="prompt"><code id="code-agent" set:html={slotHtml(agentPrompt)} /></pre>
+        </figure>
+        <p class="tabsrc">
+          The prompt runs no scripts of its own: it inspects the project, adds
+          the pub.dev releases, and pulls each package's skills for API
+          guidance before writing code.
+        </p>
+      </div>
+    </section>
+
     <section class="block" id="platforms" aria-labelledby="platforms-h">
       <div class="wrap">
         <h2 id="platforms-h">Four lines, four excerpts</h2>
@@ -680,36 +711,6 @@ melos bootstrap   # pub get everywhere
 melos run analyze # dart analyze, all packages
 melos run test    # dart + flutter tests</code></pre>
         </div>
-      </div>
-    </section>
-
-    <section class="block" id="agent" aria-labelledby="agent-h">
-      <div class="wrap">
-        <h2 id="agent-h">Boarding with an agent</h2>
-        <p class="standfirst">
-          Hand your coding agent this work order instead of the commands above.
-          It reads the project before it changes anything, asks before it
-          replaces a layer you already run, and installs from pub.dev. Fill the{" "}
-          <span class="slot">&lt;usage&gt;</span> slot with a line, or leave it
-          and the agent asks which ones you want.
-        </p>
-        <div class="tablist" role="group" aria-label="Requested usage">
-          <button class="tab" type="button" data-usage="" aria-pressed="true"><span class="slot">&lt;usage&gt;</span> ask me</button>
-          <button class="tab" type="button" data-usage="fetch" aria-pressed="false">fetch</button>
-          <button class="tab" type="button" data-usage="schema" aria-pressed="false">schema</button>
-          <button class="tab" type="button" data-usage="query" aria-pressed="false">query</button>
-          <button class="tab" type="button" data-usage="driver" aria-pressed="false">driver</button>
-          <button class="tab" type="button" data-usage="sqlite" aria-pressed="false">sqlite</button>
-        </div>
-        <figure class="code">
-          <figcaption><span>work order for your agent</span><button class="copy" data-copy="code-agent">Copy prompt</button></figcaption>
-          <pre class="prompt"><code id="code-agent" set:html={slotHtml(agentPrompt)} /></pre>
-        </figure>
-        <p class="tabsrc">
-          The prompt runs no scripts of its own: it inspects the project, adds
-          the pub.dev releases, and pulls each package's skills for API
-          guidance before writing code.
-        </p>
       </div>
     </section>
 
