@@ -1,6 +1,11 @@
 import 'package:sqlite_schema_forge/sqlite_schema_forge.dart';
 
+/// Computes the [PlanStep]s that bring a live database in line with a target
+/// [Schema]. Read-only: it never mutates the database.
 final class SchemaDiffer {
+  /// Diffs one [targetTable]: creates a missing table and its indexes,
+  /// rebuilds when a live column was dropped, otherwise adds any new columns
+  /// and missing indexes.
   static Future<List<PlanStep>> diffTable(
     DatabaseExecutor db,
     Table targetTable,
@@ -119,6 +124,8 @@ final class SchemaDiffer {
     ];
   }
 
+  /// Diffs [targetVirtualTables] against `sqlite_master`, dropping orphaned
+  /// virtual tables and (re)creating missing or changed ones.
   static Future<List<PlanStep>> diffVirtualTables(
     DatabaseExecutor db,
     List<VirtualTable> targetVirtualTables,
@@ -185,6 +192,8 @@ final class SchemaDiffer {
     return steps;
   }
 
+  /// Diffs [targetTriggers] against `sqlite_master`, dropping orphaned
+  /// triggers and (re)creating missing or changed ones.
   static Future<List<PlanStep>> diffTriggers(
     DatabaseExecutor db,
     List<Trigger> targetTriggers,
