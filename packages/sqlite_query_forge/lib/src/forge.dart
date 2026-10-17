@@ -7,6 +7,7 @@ import 'write_builder.dart';
 /// The entry point bound to one [ForgeExecutor]: reads, writes and
 /// transactions all start here.
 final class Forge {
+  /// Binds the forge to a [ForgeExecutor].
   Forge(this._executor);
 
   Forge._scope(this._executor, this._open);
