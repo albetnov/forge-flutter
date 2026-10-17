@@ -117,6 +117,45 @@ await schema.SqliteSchemaForge.migrate(
 );
 
 final forge = Forge(driver); // ForgeExecutor`;
+// Agent work order: one prompt, one <usage> slot the visitor fills or leaves.
+const agentPrompt = `You are adding The Forge Ecosystem packages to this repository.
+
+Requested usage: <usage>
+
+Step 1 — resolve the usage.
+If the line above still reads <usage>, stop and ask me which packages I want:
+  fetch  — remote data (fetch_forge)
+  schema — declarative SQLite schema and migrations (sqlite_schema_forge)
+  query  — typed SQLite query builder (sqlite_query_forge)
+  driver — background-isolate SQLite driver (sqlite3_driver_forge)
+  sqlite — the whole SQLite chain, schema to query to driver
+Wait for my answer before doing anything else. A filled-in value maps the same way.
+
+Step 2 — read this project before changing it.
+Confirm it is a Dart or Flutter project (pubspec.yaml) with SDK ^3.13.4; if not, stop and say so. Then find every existing persistence or remote-data layer: sqflite, drift or moor, floor, hive, isar, objectbox, sqlite3, sqlite_async, and hand-written database code.
+
+Step 3 — ask before you overlap.
+If something already covers the requested usage, do not add the Forge packages yet. Tell me what you found, which line overlaps it, and ask whether to replace it, run both, or stop. If nothing overlaps, or I say replace, continue.
+
+Step 4 — install.
+Use this project's package manager: flutter pub add in a Flutter project, dart pub add otherwise. Add the pub.dev releases of the chosen packages, and signals alongside fetch_forge, whose state is signal state. Then run dart run skills@ get and read what lands in .agents/skills/ before writing any code.
+
+Step 5 — wire it up from the installed skills and the package READMEs, never from memory.
+  fetch_forge — declare Query<T, V> and drive it from a variables signal;
+    wrap it in QueryScope when widgets share a client.
+  sqlite_schema_forge — declare Schema(version, tables) and run
+    SqliteSchemaForge.migrate(db:, targetSchema:).
+  sqlite_query_forge — declare Table subclasses and query through
+    Forge(driver): selectFrom, insertInto, update, deleteFrom.
+  sqlite3_driver_forge — connect one SqliteDriver and hand that same instance
+    to the migrator and to Forge.
+A partial choice still brings its dependencies: query needs schema; driver needs schema and query. Ask before running any destructive migration.
+
+When you are done, report the packages added, the files changed, anything you replaced, and the command that runs it.`;
+function slotHtml(src) {
+  const esc = src.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return esc.replace(/&lt;usage&gt;/g, '<span class="slot">&lt;usage&gt;</span>');
+}
 // Build-time Dart highlighter: comments, strings, keywords. Zero runtime cost.
 function highlight(src) {
   const esc = src.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -376,8 +415,10 @@ function highlight(src) {
       }
       .tab:hover { border-color: var(--ink); }
       .tab .pn { color: var(--red); font-weight: 700; }
-      .tab[aria-selected="true"] { background: var(--ink); border-color: var(--ink); color: var(--paper); }
-      .tab[aria-selected="true"] .pn { color: var(--red-bright); }
+      .tab[aria-selected="true"], .tab[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+      .tab[aria-selected="true"] .pn, .tab[aria-pressed="true"] .pn { color: var(--red-bright); }
+      .tab[aria-pressed="true"] .slot { color: var(--red-bright); }
+      .slot { color: #8f1f18; font-weight: 700; }
       figure.code[hidden] { display: none; }
       .tok-k { color: var(--ink); font-weight: 700; }
       .tok-s { color: #8f1f18; }
@@ -406,6 +447,7 @@ function highlight(src) {
       .copy {
         font-family: var(--mono);
         font-size: 0.75rem;
+        white-space: nowrap;
         background: transparent;
         border: 1px solid var(--rule);
         border-radius: 999px;
@@ -423,6 +465,7 @@ function highlight(src) {
         line-height: 1.65;
       }
       figure.code pre code { font-variant-numeric: tabular-nums; }
+      figure.code pre.prompt { white-space: pre-wrap; overflow-wrap: break-word; }
       /* Connection map */
       .map {
         border: 1px solid var(--rule);
@@ -640,6 +683,36 @@ melos run test    # dart + flutter tests</code></pre>
       </div>
     </section>
 
+    <section class="block" id="agent" aria-labelledby="agent-h">
+      <div class="wrap">
+        <h2 id="agent-h">Boarding with an agent</h2>
+        <p class="standfirst">
+          Hand your coding agent this work order instead of the commands above.
+          It reads the project before it changes anything, asks before it
+          replaces a layer you already run, and installs from pub.dev. Fill the{" "}
+          <span class="slot">&lt;usage&gt;</span> slot with a line, or leave it
+          and the agent asks which ones you want.
+        </p>
+        <div class="tablist" role="group" aria-label="Requested usage">
+          <button class="tab" type="button" data-usage="" aria-pressed="true"><span class="slot">&lt;usage&gt;</span> ask me</button>
+          <button class="tab" type="button" data-usage="fetch" aria-pressed="false">fetch</button>
+          <button class="tab" type="button" data-usage="schema" aria-pressed="false">schema</button>
+          <button class="tab" type="button" data-usage="query" aria-pressed="false">query</button>
+          <button class="tab" type="button" data-usage="driver" aria-pressed="false">driver</button>
+          <button class="tab" type="button" data-usage="sqlite" aria-pressed="false">sqlite</button>
+        </div>
+        <figure class="code">
+          <figcaption><span>work order for your agent</span><button class="copy" data-copy="code-agent">Copy prompt</button></figcaption>
+          <pre class="prompt"><code id="code-agent" set:html={slotHtml(agentPrompt)} /></pre>
+        </figure>
+        <p class="tabsrc">
+          The prompt runs no scripts of its own: it inspects the project, adds
+          the pub.dev releases, and pulls each package's skills for API
+          guidance before writing code.
+        </p>
+      </div>
+    </section>
+
     <footer>
       <div class="wrap">
         <span>This page summarizes the package READMEs, which stay authoritative.</span>
@@ -718,11 +791,12 @@ melos run test    # dart + flutter tests</code></pre>
         showTab(tabs[n].dataset.tab, true);
       });
       document.querySelectorAll(".copy").forEach((btn) => {
+        const label = btn.textContent;
         btn.addEventListener("click", async () => {
           const el = document.getElementById(btn.dataset.copy);
           const done = () => {
             btn.textContent = "Copied";
-            setTimeout(() => (btn.textContent = "Copy"), 1600);
+            setTimeout(() => (btn.textContent = label), 1600);
           };
           try {
             await navigator.clipboard.writeText(el.textContent);
@@ -735,6 +809,30 @@ melos run test    # dart + flutter tests</code></pre>
             s.addRange(r);
             done();
           }
+        });
+      });
+      // Work order: chips fill the first <usage> token, the rest stay literal.
+      const promptEl = document.getElementById("code-agent");
+      const promptRaw = promptEl.textContent;
+      const escHtml = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      function renderPrompt(value) {
+        const text = value ? promptRaw.replace("<usage>", value) : promptRaw;
+        const token = value || "<usage>";
+        const i = text.indexOf(token);
+        if (i < 0) return (promptEl.innerHTML = escHtml(text));
+        const head = escHtml(text.slice(0, i));
+        const slot = '<span class="slot">' + escHtml(token) + "</span>";
+        const tail = escHtml(text.slice(i + token.length)).replace(
+          /&lt;usage&gt;/g,
+          '<span class="slot">&lt;usage&gt;</span>',
+        );
+        promptEl.innerHTML = head + slot + tail;
+      }
+      const usageChips = Array.from(document.querySelectorAll("[data-usage]"));
+      usageChips.forEach((chip) => {
+        chip.addEventListener("click", () => {
+          usageChips.forEach((c) => c.setAttribute("aria-pressed", c === chip ? "true" : "false"));
+          renderPrompt(chip.dataset.usage);
         });
       });
       select("fetch");
