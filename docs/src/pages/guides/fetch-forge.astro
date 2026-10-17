@@ -114,6 +114,7 @@ final createUser = Mutation<String, int>(
 void onUserCreated(int page) {
   createUser.invalidateCache(page);
 }`;
+const skillsCmd = `dart run skills@ get`;
 ---
 
 <html lang="en">
@@ -335,7 +336,7 @@ void onUserCreated(int page) {
         vertical-align: top;
       }
       table.scope tr:last-child th, table.scope tr:last-child td { border-bottom: 0; }
-      table.scope th { font-family: var(--mono); font-size: 0.8125rem; font-weight: 400; white-space: nowrap; }
+      table.scope th { font-family: var(--mono); font-size: 0.8125rem; font-weight: 400; white-space: normal; }
       .onward {
         display: flex;
         flex-wrap: wrap;
@@ -358,6 +359,14 @@ void onUserCreated(int page) {
       footer .wrap { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; justify-content: space-between; }
       footer a { color: var(--ink); text-underline-offset: 4px; }
       footer a:hover { color: var(--red); }
+      @media (max-width: 56rem) {
+        table.scope, table.scope tbody, table.scope tr, table.scope th, table.scope td { display: block; }
+        table.scope th, table.scope td { border-bottom: 0; padding: 0.45rem 1rem; }
+        table.scope tr { border-bottom: 1px solid var(--rule); }
+        table.scope tr:last-child { border-bottom: 0; }
+        table.scope th { padding-bottom: 0; }
+        table.scope td { padding-top: 0.25rem; }
+      }
       @media (prefers-reduced-motion: reduce) {
         html { scroll-behavior: auto; }
       }
@@ -398,6 +407,7 @@ void onUserCreated(int page) {
         <li><a href="#flutter"><span class="stop">S4</span>In Flutter widgets</a></li>
         <li><a href="#recipes"><span class="stop">S5</span>Two day-one recipes</a></li>
         <li><a href="#scope"><span class="stop">S6</span>What is not included</a></li>
+        <li><a href="#skills"><span class="stop">S7</span>Agent skills</a></li>
       </ol>
 
       <div class="prose">
@@ -542,6 +552,35 @@ void onUserCreated(int page) {
           </table>
           <div class="note">
             <p><span class="lead">Rule of thumb, from the README:</span> if something cannot be built from the public API in under twenty lines, file an issue: that is a gap in the API, not a feature to add quietly.</p>
+          </div>
+        </section>
+
+        <section class="block" id="skills" aria-labelledby="skills-h">
+          <h2 id="skills-h">Agent skills</h2>
+          <p>
+            <code class="inline">fetch_forge</code> also ships its guidance as
+            agent skills: prescriptive rules and examples authored for Cursor,
+            Claude Code, Copilot, Cline, and any other agent working in your
+            repository. Each skill is a <code class="inline">SKILL.md</code>
+            shipped inside the package, so the advice is versioned with the API
+            you actually installed.
+          </p>
+          <figure class="code">
+            <figcaption><span>install the package skills</span><button class="copy" data-copy="code-skills">Copy</button></figcaption>
+            <pre><code id="code-skills" set:html={highlight(skillsCmd)} /></pre>
+          </figure>
+          <p>Five skills ship with <code class="inline">fetch_forge</code>:</p>
+          <table class="scope">
+            <tbody>
+              <tr><th scope="row">fetch-forge-query</th><td>The Query read model: constructor config, ten signals, methods, disposal, behavior contracts.</td></tr>
+              <tr><th scope="row">fetch-forge-mutation</th><td>One-shot writes: mutate vs mutateAsync, reset, cache invalidation, disposal.</td></tr>
+              <tr><th scope="row">fetch-forge-cache-keys</th><td>Variables are the cache key: equality rules, CacheKeyError, the cacheKey mapper.</td></tr>
+              <tr><th scope="row">fetch-forge-client-retry</th><td>Supporting types: QueryClient cache, CacheEntry expiry, RetryPolicy, AsyncValue.</td></tr>
+              <tr><th scope="row">fetch-forge-flutter-widgets</th><td>The Flutter layer: QueryBuilder, QueryScope, the refresh signal, disposal, testing.</td></tr>
+            </tbody>
+          </table>
+          <div class="note">
+            <p><span class="lead">Where they land:</span> run the command in an app that already depends on <code class="inline">fetch_forge</code>. The installer checks each directory's package prefix and writes the matching skills to your project's <code class="inline">.agents/skills/</code>.</p>
           </div>
         </section>
       </div>

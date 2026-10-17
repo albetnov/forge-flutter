@@ -136,6 +136,7 @@ const adapterSnippet = `final class SqfliteExecutor implements ForgeExecutor {
 
 final executor = SqfliteExecutor(db);
 final forge = Forge(executor);`;
+const skillsCmd = `dart run skills@ get`;
 ---
 
 <html lang="en">
@@ -336,6 +337,24 @@ final forge = Forge(executor);`;
       }
       .note p { margin: 0; font-size: 0.9375rem; }
       .note .lead { font-family: var(--mono); font-weight: 700; color: var(--red); }
+      table.scope {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 1.25rem 0;
+        font-size: 0.9375rem;
+        background: #fff;
+        border: 1px solid var(--rule);
+        border-radius: 12px;
+        overflow: hidden;
+      }
+      table.scope th, table.scope td {
+        text-align: left;
+        padding: 0.7rem 1rem;
+        border-bottom: 1px solid var(--rule);
+        vertical-align: top;
+      }
+      table.scope tr:last-child th, table.scope tr:last-child td { border-bottom: 0; }
+      table.scope th { font-family: var(--mono); font-size: 0.8125rem; font-weight: 400; white-space: normal; }
       .onward {
         display: flex;
         flex-wrap: wrap;
@@ -357,6 +376,14 @@ final forge = Forge(executor);`;
       footer .wrap { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; justify-content: space-between; }
       footer a { color: var(--ink); text-underline-offset: 4px; }
       footer a:hover { color: var(--red); }
+      @media (max-width: 56rem) {
+        table.scope, table.scope tbody, table.scope tr, table.scope th, table.scope td { display: block; }
+        table.scope th, table.scope td { border-bottom: 0; padding: 0.45rem 1rem; }
+        table.scope tr { border-bottom: 1px solid var(--rule); }
+        table.scope tr:last-child { border-bottom: 0; }
+        table.scope th { padding-bottom: 0; }
+        table.scope td { padding-top: 0.25rem; }
+      }
       @media (prefers-reduced-motion: reduce) {
         html { scroll-behavior: auto; }
       }
@@ -396,6 +423,7 @@ final forge = Forge(executor);`;
         <li><a href="#writes"><span class="stop">S4</span>Writes: insert, upsert, return</a></li>
         <li><a href="#tx"><span class="stop">S5</span>Transactions and compiled SQL</a></li>
         <li><a href="#bridge"><span class="stop">S6</span>Bridge back to schema</a></li>
+        <li><a href="#skills"><span class="stop">S7</span>Agent skills</a></li>
       </ol>
 
       <div class="prose">
@@ -514,6 +542,35 @@ final forge = Forge(executor);`;
           </figure>
           <div class="note">
             <p><span class="lead">No code generation:</span> declarations stay hand-written. Indexes, virtual tables, triggers, and composite keys stay in the migration schema, where those concepts already live.</p>
+          </div>
+        </section>
+
+        <section class="block" id="skills" aria-labelledby="skills-h">
+          <h2 id="skills-h">Agent skills</h2>
+          <p>
+            <code class="inline">sqlite_query_forge</code> also ships its
+            guidance as agent skills: prescriptive rules and examples authored
+            for Cursor, Claude Code, Copilot, Cline, and any other agent working
+            in your repository. Each skill is a <code class="inline">SKILL.md</code>
+            shipped inside the package, so the advice is versioned with the API
+            you actually installed.
+          </p>
+          <figure class="code">
+            <figcaption><span>install the package skills</span><button class="copy" data-copy="code-skills">Copy</button></figcaption>
+            <pre><code id="code-skills" set:html={highlight(skillsCmd)} /></pre>
+          </figure>
+          <p>Five skills ship with <code class="inline">sqlite_query_forge</code>:</p>
+          <table class="scope">
+            <tbody>
+              <tr><th scope="row">sqlite-query-forge-forge</th><td>The Forge entrypoint and the ForgeExecutor contract: queries, writes, raw statements, transactions.</td></tr>
+              <tr><th scope="row">sqlite-query-forge-select</th><td>Typed SELECTs: the SelectBuilder chain and the getMany, getSingle, getFirst, count terminals.</td></tr>
+              <tr><th scope="row">sqlite-query-forge-writes</th><td>INSERT, UPDATE, and DELETE builders: values, returning, onConflict, execute vs getMany.</td></tr>
+              <tr><th scope="row">sqlite-query-forge-expressions</th><td>Typed expressions: qualify, RawSql, SqlFragment, bound args, AND/OR precedence.</td></tr>
+              <tr><th scope="row">sqlite-query-forge-schema-bridge</th><td>One declaration, both halves: Table.columns to a schema table, and ForgeDatabaseExecutor adapters.</td></tr>
+            </tbody>
+          </table>
+          <div class="note">
+            <p><span class="lead">Where they land:</span> run the command in an app that already depends on <code class="inline">sqlite_query_forge</code>. The installer checks each directory's package prefix and writes the matching skills to your project's <code class="inline">.agents/skills/</code>.</p>
           </div>
         </section>
       </div>

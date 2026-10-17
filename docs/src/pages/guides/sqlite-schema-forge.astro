@@ -103,6 +103,7 @@ final updateTimestampTrigger = Trigger(
   targetTable: 'wallets',
   body: 'SET updated_at = CURRENT_TIMESTAMP WHERE id = old.id;',
 );`;
+const skillsCmd = `dart run skills@ get`;
 ---
 
 <html lang="en">
@@ -320,7 +321,7 @@ final updateTimestampTrigger = Trigger(
         vertical-align: top;
       }
       table.scope tr:last-child th, table.scope tr:last-child td { border-bottom: 0; }
-      table.scope th { font-family: var(--mono); font-size: 0.8125rem; font-weight: 400; white-space: nowrap; }
+      table.scope th { font-family: var(--mono); font-size: 0.8125rem; font-weight: 400; white-space: normal; }
       .onward {
         display: flex;
         flex-wrap: wrap;
@@ -342,6 +343,14 @@ final updateTimestampTrigger = Trigger(
       footer .wrap { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; justify-content: space-between; }
       footer a { color: var(--ink); text-underline-offset: 4px; }
       footer a:hover { color: var(--red); }
+      @media (max-width: 56rem) {
+        table.scope, table.scope tbody, table.scope tr, table.scope th, table.scope td { display: block; }
+        table.scope th, table.scope td { border-bottom: 0; padding: 0.45rem 1rem; }
+        table.scope tr { border-bottom: 1px solid var(--rule); }
+        table.scope tr:last-child { border-bottom: 0; }
+        table.scope th { padding-bottom: 0; }
+        table.scope td { padding-top: 0.25rem; }
+      }
       @media (prefers-reduced-motion: reduce) {
         html { scroll-behavior: auto; }
       }
@@ -379,6 +388,7 @@ final updateTimestampTrigger = Trigger(
         <li><a href="#declare"><span class="stop">S2</span>Declare the desired state</a></li>
         <li><a href="#migrate"><span class="stop">S3</span>Migrate, preview, control</a></li>
         <li><a href="#relate"><span class="stop">S4</span>Keys, search, triggers</a></li>
+        <li><a href="#skills"><span class="stop">S5</span>Agent skills</a></li>
               </ol>
 
       <div class="prose">
@@ -478,6 +488,32 @@ final updateTimestampTrigger = Trigger(
             <figcaption><span>preset or custom</span><button class="copy" data-copy="code-trigger">Copy</button></figcaption>
             <pre><code id="code-trigger" set:html={highlight(triggerSnippet)} /></pre>
           </figure>
+        </section>
+
+        <section class="block" id="skills" aria-labelledby="skills-h">
+          <h2 id="skills-h">Agent skills</h2>
+          <p>
+            <code class="inline">sqlite_schema_forge</code> also ships its
+            guidance as agent skills: prescriptive rules and examples authored
+            for Cursor, Claude Code, Copilot, Cline, and any other agent working
+            in your repository. Each skill is a <code class="inline">SKILL.md</code>
+            shipped inside the package, so the advice is versioned with the API
+            you actually installed.
+          </p>
+          <figure class="code">
+            <figcaption><span>install the package skills</span><button class="copy" data-copy="code-skills">Copy</button></figcaption>
+            <pre><code id="code-skills" set:html={highlight(skillsCmd)} /></pre>
+          </figure>
+          <p>Two skills ship with <code class="inline">sqlite_schema_forge</code>:</p>
+          <table class="scope">
+            <tbody>
+              <tr><th scope="row">sqlite-schema-forge-schema</th><td>Declaring Schema, Table, Column, Index, VirtualTable, Trigger, and RawSql, plus the DDL they generate.</td></tr>
+              <tr><th scope="row">sqlite-schema-forge-migration</th><td>plan vs applyPlan vs migrate: the destructive guard, user_version handling, callbacks, transactions.</td></tr>
+            </tbody>
+          </table>
+          <div class="note">
+            <p><span class="lead">Where they land:</span> run the command in an app that already depends on <code class="inline">sqlite_schema_forge</code>. The installer checks each directory's package prefix and writes the matching skills to your project's <code class="inline">.agents/skills/</code>.</p>
+          </div>
         </section>
       </div>
 
