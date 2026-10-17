@@ -9,6 +9,7 @@ library;
 
 import 'src/expression.dart';
 
+/// Adds `qualifyAs` to a [Column], qualifying it under a joined alias.
 extension ColumnQualify<T extends Object> on Column<T> {
   /// Qualifies this column under [alias], the name a joined source binds.
   ///
