@@ -29,32 +29,55 @@ void _writeReturning(SqlFragment fragment, List<Expression>? columns) {
   }
 }
 
+/// A statement that compiles to SQL and its bound arguments.
 sealed class Statement {
+  /// A const constructor for subclasses.
   const Statement();
 
+  /// Whether this statement returns rows.
   bool get isQuery => this is SelectStatement;
 
+  /// Compiles this statement into a [CompiledQuery].
   CompiledQuery compile() {
     final fragment = SqlFragment();
     writeTo(fragment);
     return CompiledQuery(fragment.sql, fragment.args);
   }
 
+  /// Writes this statement's SQL to [fragment].
   void writeTo(SqlFragment fragment);
 }
 
+/// A `SELECT` query.
 final class SelectStatement extends Statement {
   /// Empty means `*`.
   final List<Expression> columns;
+
+  /// The table or subquery the rows are read from, if any.
   final Source? from;
+
+  /// The `JOIN` clauses, applied in order.
   final List<JoinClause> joins;
+
+  /// The `WHERE` predicate, if any.
   final Expression? where;
+
+  /// The `GROUP BY` and `HAVING` clauses, if any.
   final Grouping? groupBy;
+
+  /// The `ORDER BY` keys, applied in order.
   final List<OrderBy> orderBy;
+
+  /// The `LIMIT` count, bound as a parameter, if any.
   final int? limit;
+
+  /// The `OFFSET` count, bound as a parameter, if any.
   final int? offset;
+
+  /// Whether `SELECT DISTINCT` is emitted.
   final bool distinct;
 
+  /// Builds a `SELECT` from its clauses.
   const SelectStatement({
     this.columns = const [],
     this.from,
@@ -166,8 +189,10 @@ final class SelectStatement extends Statement {
 
 /// A `SELECT` used in a `FROM` position.
 final class SubquerySource extends Source {
+  /// The query rendered inside the parentheses.
   final SelectStatement inner;
 
+  /// Wraps [inner] as a `FROM` source.
   const SubquerySource(this.inner);
 
   @override
@@ -178,15 +203,24 @@ final class SubquerySource extends Source {
   }
 }
 
+/// An `INSERT` that writes one or more rows.
 final class InsertStatement extends Statement {
+  /// The table the rows are written to.
   final TableSource target;
+
+  /// The column names, quoted as identifiers.
   final List<String> columns;
+
+  /// The rows of values, one bound parameter per cell.
   final List<List<Object?>> rows;
+
+  /// The `ON CONFLICT` clause, if any.
   final ConflictClause? onConflict;
 
   /// A `null` value omits the clause; an empty list means `*`.
   final List<Expression>? returning;
 
+  /// Builds an `INSERT` of [rows] into [columns].
   const InsertStatement(
     this.target,
     this.columns,
@@ -195,6 +229,7 @@ final class InsertStatement extends Statement {
     this.returning,
   });
 
+  /// Builds an `INSERT` of a single row.
   factory InsertStatement.one(
     TableSource target,
     List<String> columns,
@@ -234,24 +269,34 @@ final class InsertStatement extends Statement {
   }
 }
 
+/// An `ON CONFLICT` clause.
 final class ConflictClause {
+  /// The conflict target columns, quoted as identifiers.
   final List<String> targetColumns;
+
+  /// The columns assigned by `DO UPDATE SET`.
   final Map<String, Object?> updates;
+
+  /// Whether the clause is `DO NOTHING` instead of an update.
   final bool doNothing;
 
+  /// Builds an `ON CONFLICT` clause.
   const ConflictClause({
     this.targetColumns = const [],
     this.updates = const {},
     this.doNothing = false,
   });
 
+  /// Updates the given columns when [targetColumns] conflict.
   factory ConflictClause.update(
     List<String> targetColumns,
     Map<String, Object?> updates,
   ) => ConflictClause(targetColumns: targetColumns, updates: updates);
 
+  /// Ignores conflicts with `ON CONFLICT DO NOTHING`.
   factory ConflictClause.ignore() => const ConflictClause(doNothing: true);
 
+  /// Writes this clause's SQL to [fragment].
   void writeTo(SqlFragment fragment) {
     if (doNothing) {
       fragment.write(' ON CONFLICT DO NOTHING');
@@ -279,14 +324,22 @@ final class ConflictClause {
   }
 }
 
+/// An `UPDATE` of one or more columns.
 final class UpdateStatement extends Statement {
+  /// The table being updated.
   final TableSource target;
+
+  /// The columns and their new values; each value binds unless it is an
+  /// [Expression].
   final Map<String, Object?> values;
+
+  /// The `WHERE` predicate restricting the rows, if any.
   final Expression? where;
 
   /// A `null` value omits the clause; an empty list means `*`.
   final List<Expression>? returning;
 
+  /// Builds an `UPDATE` of [values] on [target].
   const UpdateStatement(this.target, this.values, [this.where, this.returning]);
 
   @override
@@ -313,12 +366,16 @@ final class UpdateStatement extends Statement {
 
 /// A `null` [where] deletes every row.
 final class DeleteStatement extends Statement {
+  /// The table rows are deleted from.
   final TableSource target;
+
+  /// The `WHERE` predicate restricting the deletion, if any.
   final Expression? where;
 
   /// A `null` value omits the clause; an empty list means `*`.
   final List<Expression>? returning;
 
+  /// Builds a `DELETE` on [target].
   const DeleteStatement(this.target, [this.where, this.returning]);
 
   @override
@@ -334,13 +391,18 @@ final class DeleteStatement extends Statement {
   }
 }
 
+/// A `CREATE TABLE` statement.
 final class CreateTableStatement extends Statement {
+  /// The table being created.
   final TableSource target;
 
   /// Pre-rendered SQL definitions, not quoted here.
   final List<String> columnDefinitions;
+
+  /// Whether `IF NOT EXISTS` is emitted.
   final bool ifNotExists;
 
+  /// Builds a `CREATE TABLE` from pre-rendered [columnDefinitions].
   const CreateTableStatement(
     this.target,
     this.columnDefinitions, {
