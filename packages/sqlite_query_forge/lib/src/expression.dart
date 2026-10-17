@@ -1,27 +1,57 @@
 import 'sql_fragment.dart';
 
 /// How a column is stored. Carries the DDL, not the Dart type.
-enum ColumnType { integer, text, real, blob }
+enum ColumnType {
+  /// A SQLite `INTEGER`.
+  integer,
+
+  /// A SQLite `TEXT`.
+  text,
+
+  /// A SQLite `REAL`.
+  real,
+
+  /// A SQLite `BLOB`.
+  blob,
+}
 
 /// A column reference, and how the migrator creates it.
 ///
 /// The type parameter is phantom, so `Column<int>.eq` demands an `int` while
 /// `Column<String>.eq` demands a `String`.
 final class Column<T extends Object> extends Expression {
+  /// The name of the column, quoted as an identifier when rendered.
   final String name;
 
   /// Null for a column built by the plain constructor, which makes it
   /// un-migratable.
   final ColumnType? type;
 
+  /// Whether the column is declared `PRIMARY KEY`.
   final bool primaryKey;
+
+  /// Whether the column is declared `AUTOINCREMENT`.
   final bool autoIncrement;
+
+  /// Whether the column accepts `NULL`.
   final bool nullable;
+
+  /// Whether the column is declared `UNIQUE`.
   final bool unique;
+
+  /// The default written in the column definition; a [RawSql] is emitted
+  /// verbatim, any other non-null object is bound as a literal.
   final Object? defaultValue;
+
+  /// The table this column's foreign key references, if any.
   final String? referencesTable;
+
+  /// The column this column's foreign key references, if any.
   final String? referencesColumn;
 
+  /// Builds a column from explicit attributes.
+  ///
+  /// [type] may be null, which leaves the column un-migratable.
   const Column(
     this.name, {
     this.type,
@@ -44,6 +74,7 @@ final class Column<T extends Object> extends Expression {
         nullable: false,
       );
 
+  /// `INTEGER`, with an optional primary key, autoincrement, and default.
   const Column.integer(
     String name, {
     bool primaryKey = false,
@@ -65,6 +96,7 @@ final class Column<T extends Object> extends Expression {
          referencesColumn: referencesColumn,
        );
 
+  /// `TEXT`, with an optional unique constraint and default.
   const Column.text(
     String name, {
     bool nullable = true,
@@ -91,6 +123,7 @@ final class Column<T extends Object> extends Expression {
          defaultValue: defaultValue,
        );
 
+  /// `REAL`, with an optional default.
   const Column.real(String name, {bool nullable = true, double? defaultValue})
     : this(
         name,
@@ -99,6 +132,7 @@ final class Column<T extends Object> extends Expression {
         defaultValue: defaultValue,
       );
 
+  /// `BLOB`.
   const Column.blob(String name, {bool nullable = true})
     : this(name, type: ColumnType.blob, nullable: nullable);
 
@@ -108,28 +142,38 @@ final class Column<T extends Object> extends Expression {
   @override
   void writeTo(SqlFragment fragment) => fragment.writeIdentifier(name);
 
+  /// `"name" = ?` with [value] bound.
   Expression eq(T value) => Comparison(this, CompareOp.eq, value);
 
+  /// `"name" <> ?` with [value] bound.
   Expression neq(T value) => Comparison(this, CompareOp.neq, value);
 
+  /// `"name" > ?` with [value] bound.
   Expression gt(T value) => Comparison(this, CompareOp.gt, value);
 
+  /// `"name" >= ?` with [value] bound.
   Expression gte(T value) => Comparison(this, CompareOp.gte, value);
 
+  /// `"name" < ?` with [value] bound.
   Expression lt(T value) => Comparison(this, CompareOp.lt, value);
 
+  /// `"name" <= ?` with [value] bound.
   Expression lte(T value) => Comparison(this, CompareOp.lte, value);
 
   /// You write the `%` wildcards; the pattern stays bound.
   Expression like(T pattern) => Comparison(this, CompareOp.like, pattern);
 
+  /// `"name" IS NULL`.
   Expression get isNull => NullCheck(this, negated: false);
 
+  /// `"name" IS NOT NULL`.
   Expression get isNotNull => NullCheck(this, negated: true);
 
+  /// `"name" BETWEEN ? AND ?` with both bounds bound.
   Expression between(T lower, T upper) =>
       Between(this, CompareOp.between, lower, upper);
 
+  /// `"name" NOT BETWEEN ? AND ?` with both bounds bound.
   Expression notBetween(T lower, T upper) =>
       Between(this, CompareOp.notBetween, lower, upper);
 
@@ -137,18 +181,25 @@ final class Column<T extends Object> extends Expression {
   /// `IN ()`.
   Expression inList(List<T?> values) => InList(this, values);
 
+  /// `"name" NOT IN (...)` with each value bound.
   Expression notIn(List<T?> values) => InList(this, values, negated: true);
 
+  /// `COUNT("name")`.
   Expression get count => Aggregate('COUNT', [this]);
 
+  /// `COUNT(DISTINCT "name")`.
   Expression get countDistinct => Aggregate.distinct('COUNT', [this]);
 
+  /// `SUM("name")`.
   Expression get sum => Aggregate('SUM', [this]);
 
+  /// `AVG("name")`.
   Expression get avg => Aggregate('AVG', [this]);
 
+  /// `MIN("name")`.
   Expression get min => Aggregate('MIN', [this]);
 
+  /// `MAX("name")`.
   Expression get max => Aggregate('MAX', [this]);
 }
 
@@ -158,8 +209,10 @@ final class QualifiedColumn<T extends Object> extends Expression {
   /// aliased, otherwise its name.
   final String reference;
 
+  /// The name of the column, quoted as an identifier when rendered.
   final String name;
 
+  /// Binds [name] to the table or alias [reference].
   const QualifiedColumn(this.reference, this.name);
 
   @override
@@ -170,45 +223,66 @@ final class QualifiedColumn<T extends Object> extends Expression {
   }
 }
 
+/// Comparison and aggregate helpers for [QualifiedColumn], mirroring the ones
+/// on [Column] but rendering the qualified `"table"."column"` reference.
 extension QualifiedColumnOps<T extends Object> on QualifiedColumn<T> {
+  /// `"table"."name" = ?` with [value] bound.
   Expression eq(T value) => Comparison(this, CompareOp.eq, value);
 
+  /// `"table"."name" <> ?` with [value] bound.
   Expression neq(T value) => Comparison(this, CompareOp.neq, value);
 
+  /// `"table"."name" > ?` with [value] bound.
   Expression gt(T value) => Comparison(this, CompareOp.gt, value);
 
+  /// `"table"."name" >= ?` with [value] bound.
   Expression gte(T value) => Comparison(this, CompareOp.gte, value);
 
+  /// `"table"."name" < ?` with [value] bound.
   Expression lt(T value) => Comparison(this, CompareOp.lt, value);
 
+  /// `"table"."name" <= ?` with [value] bound.
   Expression lte(T value) => Comparison(this, CompareOp.lte, value);
 
+  /// You write the `%` wildcards; the pattern stays bound.
   Expression like(T pattern) => Comparison(this, CompareOp.like, pattern);
 
+  /// `"table"."name" BETWEEN ? AND ?` with both bounds bound.
   Expression between(T lower, T upper) =>
       Between(this, CompareOp.between, lower, upper);
 
+  /// `"table"."name" NOT BETWEEN ? AND ?` with both bounds bound.
   Expression notBetween(T lower, T upper) =>
       Between(this, CompareOp.notBetween, lower, upper);
 
+  /// `"table"."name" IN (...)` with each value bound.
   Expression inList(List<T?> values) => InList(this, values);
 
+  /// `"table"."name" NOT IN (...)` with each value bound.
   Expression notIn(List<T?> values) => InList(this, values, negated: true);
 
+  /// `"table"."name" IS NULL`.
   Expression get isNull => NullCheck(this, negated: false);
 
+  /// `"table"."name" IS NOT NULL`.
   Expression get isNotNull => NullCheck(this, negated: true);
 
+  /// `COUNT("table"."name")`.
   Expression get count => Aggregate('COUNT', [this]);
 
+  /// `COUNT(DISTINCT "table"."name")`.
   Expression get countDistinct => Aggregate.distinct('COUNT', [this]);
 
+  /// `SUM("table"."name")`.
   Expression get sum => Aggregate('SUM', [this]);
 
+  /// `AVG("table"."name")`.
   Expression get avg => Aggregate('AVG', [this]);
 
+  /// `MIN("table"."name")`.
   Expression get min => Aggregate('MIN', [this]);
 
+  /// `MAX("table"."name")`.
   Expression get max => Aggregate('MAX', [this]);
 }
 
