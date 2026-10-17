@@ -1,6 +1,7 @@
 ---
 // sqlite3_driver_forge quick-start guide. Same Read frame as the other guides.
 // All prose and code derived from packages/sqlite3_driver_forge/README.md.
+const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
 function highlight(src) {
   const esc = src.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const re = /(\/\/[^\n]*|#[^\n]*)|('(?:[^'\\\n]|\\.)*')|\b(final|const|var|late|class|extends|import|return|await|async|if|else|new|this|super|is|in|as|get|static|factory|try|catch|finally|throw)\b/g;
@@ -306,9 +307,9 @@ const skillsCmd = `dart run skills@ get`;
   <body>
     <div class="wrap">
       <div class="masthead">
-        <p class="wordmark"><a href="/">The Forge <span class="rule-red">/</span> Ecosystem</a></p>
+        <p class="wordmark"><a href={base}>The Forge <span class="rule-red">/</span> Ecosystem</a></p>
         <nav aria-label="Primary">
-          <a href="/guides/">Guides</a>
+          <a href={`${base}guides/`}>Guides</a>
           <a href="https://github.com/albetnov/the_forge_ecosystem">GitHub</a>
         </nav>
       </div>
@@ -446,8 +447,8 @@ const skillsCmd = `dart run skills@ get`;
       </div>
 
       <div class="onward">
-        <a href="/guides/sqlite-query-forge">← sqlite_query_forge guide</a>
-        <a href="/guides/">All guides ↑</a>
+        <a href={`${base}guides/sqlite-query-forge`}>← sqlite_query_forge guide</a>
+        <a href={`${base}guides/`}>All guides ↑</a>
       </div>
     </div>
 

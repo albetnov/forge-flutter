@@ -1,12 +1,13 @@
 ---
 // Guides hub: the navigator for the guide series. Read frame, timetable rows.
+const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
 const guides = [
   {
     code: "G1",
     pkg: "fetch_forge",
     title: "fetch_forge quick start",
     stops: "Query · Mutation · Flutter · Skills · 7 stops",
-    href: "/guides/fetch-forge",
+    href: `${base}guides/fetch-forge`,
     ready: true,
   },
   {
@@ -14,7 +15,7 @@ const guides = [
     pkg: "sqlite_schema_forge",
     title: "sqlite_schema_forge quick start",
     stops: "Declare · Migrate · Keys/FTS · Skills · 5 stops",
-    href: "/guides/sqlite-schema-forge",
+    href: `${base}guides/sqlite-schema-forge`,
     ready: true,
   },
   {
@@ -22,7 +23,7 @@ const guides = [
     pkg: "sqlite_query_forge",
     title: "sqlite_query_forge quick start",
     stops: "Design · Reads · Writes · Bridge · Skills · 7 stops",
-    href: "/guides/sqlite-query-forge",
+    href: `${base}guides/sqlite-query-forge`,
     ready: true,
   },
   {
@@ -30,7 +31,7 @@ const guides = [
     pkg: "sqlite3_driver_forge",
     title: "sqlite3_driver_forge quick start",
     stops: "Connect · Serialize · Encrypt · Limits · Skills · 7 stops",
-    href: "/guides/sqlite3-driver-forge",
+    href: `${base}guides/sqlite3-driver-forge`,
     ready: true,
   },
 ];
@@ -211,10 +212,10 @@ const guides = [
   <body>
     <div class="wrap">
       <div class="masthead">
-        <p class="wordmark"><a href="/">The Forge <span class="rule-red">/</span> Ecosystem</a></p>
+        <p class="wordmark"><a href={base}>The Forge <span class="rule-red">/</span> Ecosystem</a></p>
         <nav aria-label="Primary">
-          <a href="/#departures">Departures</a>
-          <a href="/guides/" aria-current="page">Guides</a>
+          <a href={`${base}#departures`}>Departures</a>
+          <a href={`${base}guides/`} aria-current="page">Guides</a>
           <a href="https://github.com/albetnov/the_forge_ecosystem">GitHub</a>
         </nav>
       </div>
@@ -247,7 +248,7 @@ const guides = [
       <p class="after">
         Each guide names its README source and stays beneath it: the package
         READMEs remain authoritative. Series order follows the dependency
-        chain, <a href="/">back to all departures</a>.
+        chain, <a href={base}>back to all departures</a>.
       </p>
 
       <p class="pointer">

@@ -1,0 +1,92 @@
+name: Dart CI
+
+# Runs the Dart/Flutter test suites for the packages on `main` and for every
+# release tag. Release tags are `<version>-<suffix>`, one suffix per package:
+#
+#   *-query   -> sqlite_query_forge
+#   *-fetch   -> fetch_forge
+#   *-schema  -> sqlite_schema_forge
+#   *-driver  -> sqlite3_driver_forge
+#
+# SECURITY: there is deliberately no `pull_request` trigger here. Executing
+# code from a fork that targets `main` would run untrusted code on our
+# runners (a supply-chain risk), so this workflow only listens to pushes to
+# trusted refs.
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - '*-query'
+      - '*-fetch'
+      - '*-schema'
+      - '*-driver'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dart-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Decide which package(s) to test: a single package for a release tag, or
+  # the whole workspace for a push to `main`.
+  select:
+    name: Select packages
+    runs-on: ubuntu-latest
+    outputs:
+      packages: ${{ steps.pick.outputs.packages }}
+    steps:
+      - id: pick
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            case "${GITHUB_REF_NAME}" in
+              *-query)  packages='["sqlite_query_forge"]' ;;
+              *-fetch)  packages='["fetch_forge"]' ;;
+              *-schema) packages='["sqlite_schema_forge"]' ;;
+              *-driver) packages='["sqlite3_driver_forge"]' ;;
+              *)        packages='[]' ;;
+            esac
+          else
+            packages='["sqlite_schema_forge","sqlite_query_forge","sqlite3_driver_forge","fetch_forge"]'
+          fi
+          echo "packages=${packages}" >> "$GITHUB_OUTPUT"
+
+  test:
+    name: ${{ matrix.package }}
+    needs: select
+    if: needs.select.outputs.packages != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: ${{ fromJSON(needs.select.outputs.packages) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # fetch_forge is a Flutter package and is part of the Pub workspace,
+      # so the Flutter SDK is required to resolve the workspace at the root.
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Resolve workspace
+        run: flutter pub get
+
+      - name: Analyze
+        run: dart analyze --fatal-warnings packages/${{ matrix.package }}
+
+      - name: Test
+        working-directory: packages/${{ matrix.package }}
+        shell: bash
+        run: |
+          case "${{ matrix.package }}" in
+            fetch_forge) flutter test ;;
+            *)           dart test ;;
+          esac

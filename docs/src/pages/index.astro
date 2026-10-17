@@ -1,6 +1,7 @@
 ---
 // Forge docs landing: single route. Timetable direction, code-led.
 // All copy and code from the monorepo READMEs; links follow known paths.
+const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
 const lines = [
   {
     id: "fetch",
@@ -534,7 +535,7 @@ function highlight(src) {
           <a href="#departures">Packages</a>
           <a href="#platforms">Code</a>
           <a href="#origin">Origin</a>
-          <a href="/guides/">Guides</a>
+          <a href={`${base}guides/`}>Guides</a>
           <a href="https://github.com/albetnov/the_forge_ecosystem">GitHub</a>
         </nav>
       </div>
