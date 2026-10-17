@@ -630,6 +630,25 @@ final class CaseWhen extends Expression {
   }
 }
 
+/// A literal value in an expression position. Renders `?` and binds [value].
+///
+/// [FunctionCall] arguments must be [Expression]s, so static values inside
+/// calls need this node: `FunctionCall('COALESCE', [amount.sum, const Lit(0)])`
+/// compiles to `COALESCE(SUM("amount"), ?)` with `0` bound, and
+/// `FunctionCall('substr', [name, const Lit(1), const Lit(10)])` compiles to
+/// `substr("name", ?, ?)` with `1` and `10` bound. Booleans bind as `1`/`0`,
+/// following the same rule as every other bound value.
+final class Lit extends Expression {
+  /// The value bound to the `?` placeholder.
+  final Object? value;
+
+  /// Wraps [value] as a bound literal.
+  const Lit(this.value);
+
+  @override
+  void writeTo(SqlFragment fragment) => fragment.bind(value);
+}
+
 /// Emitted verbatim. Only safe for trusted, static SQL.
 final class RawSql extends Expression {
   /// The SQL text emitted verbatim.

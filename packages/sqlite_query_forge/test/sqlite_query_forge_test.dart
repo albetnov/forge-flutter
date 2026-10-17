@@ -516,6 +516,56 @@ void main() {
     });
   });
 
+  group('lit', () {
+    test('COALESCE with a static fallback binds the fallback', () {
+      final q = SelectStatement(
+        columns: [
+          FunctionCall('COALESCE', [amount.sum, const Lit(0)]),
+        ],
+      ).compile();
+      expect(q.sql, 'SELECT COALESCE(SUM("amount"), ?)');
+      expect(q.args, [0]);
+    });
+
+    test('substr with static bounds binds each bound', () {
+      final q = SelectStatement(
+        columns: [
+          FunctionCall('substr', [name, const Lit(1), const Lit(10)]),
+        ],
+      ).compile();
+      expect(q.sql, 'SELECT substr("name", ?, ?)');
+      expect(q.args, [1, 10]);
+    });
+
+    test('bools bind as 1/0 like every other bound value', () {
+      expect(
+        argsOf(SelectStatement(columns: [const Lit(true)])),
+        [1],
+      );
+      expect(argsOf(SelectStatement(columns: [const Lit(false)])), [0]);
+    });
+
+    test('strings and nulls bind as placeholders', () {
+      final q = SelectStatement(
+        columns: [const Lit('ada'), const Lit(null)],
+      ).compile();
+      expect(q.sql, 'SELECT ?, ?');
+      expect(q.args, ['ada', null]);
+    });
+
+    test('const declarations share one instance', () {
+      expect(identical(const Lit(0), const Lit(0)), isTrue);
+    });
+
+    test('works through ExpressionOps comparisons without changing the SQL', () {
+      final q = SelectStatement(
+        groupBy: Grouping([name], amount.sum.eq(const Lit(0))),
+      ).compile();
+      expect(q.sql, 'SELECT * GROUP BY "name" HAVING SUM("amount") = ?');
+      expect(q.args, [0]);
+    });
+  });
+
   group('logical composition', () {
     test('AND binds both sides in order', () {
       final q = SelectStatement(where: Conjunction(id.eq(1), name.eq('a')))
@@ -889,6 +939,7 @@ void main() {
         Aliased() => 'aliased',
         Collated() => 'collated',
         CaseWhen() => 'case when',
+        Lit() => 'literal',
         RawSql() => 'raw',
         JsonObject() => 'json object',
         Aggregate() => 'aggregate',

@@ -28,6 +28,7 @@ JsonObject({'id': users.id}).alias('user')
 | `sameAs(other)` / passing an `Expression` as the value to `eq/...` | Column-to-column: renders reference, binds nothing (`RefComparison`). Bare `Column` works, no bridge needed. |
 | Aggregates `count/countDistinct/sum/avg/min/max`, `FunctionCall`, `JsonObject`, `Collated`, `Negation`, `parenthesized`, `alias` | `JsonObject` keys are string literals, values are expressions; duplicate map keys collapse. `FunctionCall.name` is unquoted — fixed names only. |
 | `CaseWhen(branches, [orElse])` + `WhenBranch(condition, result)` | `CASE WHEN <cond> THEN <result> ... ELSE <else> END`. Conditions render as expressions; results/`orElse` render as references when `Expression`, else bind as `?`. Null `orElse` omits `ELSE`. Composes inside `SUM(...)` for conditional aggregates. |
+| `Lit(value)` | Literal in an expression position: renders `?`, binds the value (`bool` → `1/0`). For static `FunctionCall` args — `COALESCE(x, const Lit(0))`, `substr(col, const Lit(1), const Lit(10))`. |
 | `RawSql(sql)` | Verbatim escape hatch (`*`, `excluded."email"`, `CURRENT_TIMESTAMP`, `last_insert_rowid()`). |
 | `qualify` | `table.qualify(col, [alias])` → `"alias"."col"`; `TableSource.reference` is `alias ?? name`. `qualifyAs(alias)` (opt-in import) is the same call on the column. |
 
