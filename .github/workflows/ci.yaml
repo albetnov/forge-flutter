@@ -79,6 +79,20 @@ jobs:
       - name: Resolve workspace
         run: flutter pub get
 
+      # `dart analyze <package>` walks subdirectories, including standalone
+      # example apps that live outside the pub workspace. Without their own
+      # `pub get`, the analyzer reports their `package:` imports as unresolved
+      # errors (this is what broke fetch_forge's example/app/test).
+      - name: Resolve example projects
+        shell: bash
+        run: |
+          shopt -s globstar nullglob
+          for pubspec in packages/${{ matrix.package }}/example/**/pubspec.yaml; do
+            dir="$(dirname "$pubspec")"
+            echo "Resolving $dir"
+            (cd "$dir" && flutter pub get)
+          done
+
       - name: Analyze
         run: dart analyze --fatal-warnings packages/${{ matrix.package }}
 
