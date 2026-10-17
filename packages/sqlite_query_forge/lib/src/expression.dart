@@ -286,25 +286,48 @@ extension QualifiedColumnOps<T extends Object> on QualifiedColumn<T> {
   Expression get max => Aggregate('MAX', [this]);
 }
 
+/// A SQL comparison operator paired with the text it renders.
 enum CompareOp {
+  /// `=`.
   eq('='),
+
+  /// `<>`.
   neq('<>'),
+
+  /// `>`.
   gt('>'),
+
+  /// `>=`.
   gte('>='),
+
+  /// `<`.
   lt('<'),
+
+  /// `<=`.
   lte('<='),
+
+  /// `LIKE`.
   like('LIKE'),
+
+  /// `BETWEEN`.
   between('BETWEEN'),
+
+  /// `NOT BETWEEN`.
   notBetween('NOT BETWEEN');
 
+  /// Binds this operator to its [sql] text.
   const CompareOp(this.sql);
 
+  /// The SQL keyword or symbol this operator renders.
   final String sql;
 }
 
+/// A node that renders SQL and binds its parameters through a [SqlFragment].
 sealed class Expression {
+  /// A const constructor for subclasses.
   const Expression();
 
+  /// Writes this expression's SQL to [fragment].
   void writeTo(SqlFragment fragment);
 }
 
@@ -317,34 +340,49 @@ Expression _comparison(Expression left, CompareOp op, Object? value) =>
     ? RefComparison(left, op, value)
     : Comparison(left, op, value);
 
+/// Chainable comparison helpers for any [Expression].
 extension ExpressionOps on Expression {
+  /// Wraps this expression in parentheses.
   Expression get parenthesized => Parenthesized(this);
 
+  /// Renders this expression as `AS "alias"`.
   Expression alias(String alias) => Aliased(this, alias);
 
   /// Column-to-column equality. Renders `left = right` binding nothing.
   Expression sameAs(Expression other) =>
       RefComparison(this, CompareOp.eq, other);
 
+  /// `left = ?`, or a reference comparison when [value] is an [Expression].
   Expression eq(Object? value) => _comparison(this, CompareOp.eq, value);
 
+  /// `left <> ?`, or a reference comparison when [value] is an [Expression].
   Expression neq(Object? value) => _comparison(this, CompareOp.neq, value);
 
+  /// `left > ?`, or a reference comparison when [value] is an [Expression].
   Expression gt(Object? value) => _comparison(this, CompareOp.gt, value);
 
+  /// `left >= ?`, or a reference comparison when [value] is an [Expression].
   Expression gte(Object? value) => _comparison(this, CompareOp.gte, value);
 
+  /// `left < ?`, or a reference comparison when [value] is an [Expression].
   Expression lt(Object? value) => _comparison(this, CompareOp.lt, value);
 
+  /// `left <= ?`, or a reference comparison when [value] is an [Expression].
   Expression lte(Object? value) => _comparison(this, CompareOp.lte, value);
 }
 
 /// [name] is emitted unquoted, so only use fixed names.
 class FunctionCall extends Expression {
+  /// The function name, emitted unquoted.
   final String name;
+
+  /// The argument expressions, rendered in order.
   final List<Expression> arguments;
+
+  /// Whether `DISTINCT` is emitted before the arguments.
   final bool distinct;
 
+  /// Builds a call to [name] over [arguments].
   FunctionCall(this.name, this.arguments, {this.distinct = false});
 
   @override
@@ -364,8 +402,10 @@ class FunctionCall extends Expression {
 ///
 /// The map is keyed by label, so a duplicate key collapses to one field.
 final class JsonObject extends Expression {
+  /// The labels and their value expressions, in insertion order.
   final Map<String, Expression> fields;
 
+  /// Builds a `json_object` over [fields].
   const JsonObject(this.fields);
 
   @override
@@ -383,18 +423,27 @@ final class JsonObject extends Expression {
   }
 }
 
+/// A [FunctionCall] to an aggregate such as `COUNT` or `SUM`.
 final class Aggregate extends FunctionCall {
+  /// Builds an aggregate call over [arguments].
   Aggregate(super.name, super.arguments);
 
+  /// Builds a `DISTINCT` aggregate over [arguments].
   Aggregate.distinct(super.name, super.arguments) : super(distinct: true);
 }
 
 /// `left operator ?` with the value bound.
 final class Comparison extends Expression {
+  /// The left operand, rendered as an expression.
   final Expression left;
+
+  /// The comparison operator.
   final CompareOp operator;
+
+  /// The value bound as the right operand.
   final Object? value;
 
+  /// Compares [left] to [value] with [operator].
   const Comparison(this.left, this.operator, this.value);
 
   @override
@@ -407,10 +456,16 @@ final class Comparison extends Expression {
 
 /// `left operator right` where both sides are expressions. Nothing is bound.
 final class RefComparison extends Expression {
+  /// The left operand.
   final Expression left;
+
+  /// The comparison operator.
   final CompareOp operator;
+
+  /// The right operand.
   final Expression right;
 
+  /// Compares [left] to [right] with [operator], binding nothing.
   const RefComparison(this.left, this.operator, this.right);
 
   @override
@@ -423,9 +478,13 @@ final class RefComparison extends Expression {
 
 /// `= NULL` is never true in SQL.
 final class NullCheck extends Expression {
+  /// The expression tested for null.
   final Expression left;
+
+  /// Whether the check renders `IS NOT NULL`.
   final bool negated;
 
+  /// Checks [left] for null, negating the test when [negated].
   const NullCheck(this.left, {required this.negated});
 
   @override
@@ -435,12 +494,21 @@ final class NullCheck extends Expression {
   }
 }
 
+/// `left BETWEEN lower AND upper`, with both bounds bound.
 final class Between extends Expression {
+  /// The expression tested against the bounds.
   final Expression left;
+
+  /// `BETWEEN` or `NOT BETWEEN`.
   final CompareOp operator;
+
+  /// The inclusive lower bound, bound as a parameter.
   final Object? lower;
+
+  /// The inclusive upper bound, bound as a parameter.
   final Object? upper;
 
+  /// Matches [left] between [lower] and [upper] using [operator].
   const Between(this.left, this.operator, this.lower, this.upper);
 
   @override
@@ -453,11 +521,18 @@ final class Between extends Expression {
   }
 }
 
+/// `left IN (...)`, with each value bound. An empty list folds to a constant.
 final class InList extends Expression {
+  /// The expression tested for membership.
   final Expression left;
+
+  /// The candidate values, bound in order.
   final List<Object?> values;
+
+  /// Whether the test renders `NOT IN`.
   final bool negated;
 
+  /// Tests [left] for membership in [values], negating when [negated].
   InList(this.left, this.values, {this.negated = false});
 
   @override
@@ -478,18 +553,25 @@ final class InList extends Expression {
 
 /// Emitted verbatim. Only safe for trusted, static SQL.
 final class RawSql extends Expression {
+  /// The SQL text emitted verbatim.
   final String sql;
 
+  /// Wraps [sql] for verbatim emission.
   const RawSql(this.sql);
 
   @override
   void writeTo(SqlFragment fragment) => fragment.write(sql);
 }
 
+/// `inner AS "alias"`.
 final class Aliased extends Expression {
+  /// The expression being aliased.
   final Expression inner;
+
+  /// The alias, quoted as an identifier.
   final String aliasName;
 
+  /// Aliases [inner] as [aliasName].
   const Aliased(this.inner, this.aliasName);
 
   @override
@@ -500,9 +582,12 @@ final class Aliased extends Expression {
   }
 }
 
+/// `(inner)`.
 final class Parenthesized extends Expression {
+  /// The wrapped expression.
   final Expression inner;
 
+  /// Wraps [inner] in parentheses.
   const Parenthesized(this.inner);
 
   @override
@@ -513,10 +598,15 @@ final class Parenthesized extends Expression {
   }
 }
 
+/// `left AND right`.
 final class Conjunction extends Expression {
+  /// The left operand.
   final Expression left;
+
+  /// The right operand.
   final Expression right;
 
+  /// Joins [left] and [right] with `AND`.
   const Conjunction(this.left, this.right);
 
   @override
@@ -527,10 +617,15 @@ final class Conjunction extends Expression {
   }
 }
 
+/// `left OR right`.
 final class Disjunction extends Expression {
+  /// The left operand.
   final Expression left;
+
+  /// The right operand.
   final Expression right;
 
+  /// Joins [left] and [right] with `OR`.
   const Disjunction(this.left, this.right);
 
   @override
@@ -541,9 +636,12 @@ final class Disjunction extends Expression {
   }
 }
 
+/// `NOT (inner)`.
 final class Negation extends Expression {
+  /// The expression being negated.
   final Expression inner;
 
+  /// Renders `NOT (...)` around [inner].
   const Negation(this.inner);
 
   @override
@@ -554,10 +652,15 @@ final class Negation extends Expression {
   }
 }
 
+/// `inner COLLATE collation`.
 final class Collated extends Expression {
+  /// The expression being collated.
   final Expression inner;
+
+  /// The collation name, emitted verbatim.
   final String collation;
 
+  /// Applies [collation] to [inner].
   const Collated(this.inner, this.collation);
 
   @override
