@@ -41,11 +41,22 @@ const String _kDest = 'dest';
 
 /// Request ops understood by the worker.
 abstract final class WorkerOp {
+  /// `SELECT` returning result rows.
   static const String query = 'query';
+
+  /// A statement with no result rows.
   static const String execute = 'execute';
+
+  /// `INSERT` returning the last row id and the change count.
   static const String insert = 'insert';
+
+  /// `VACUUM INTO` online backup to a destination path.
   static const String backup = 'backup';
+
+  /// Re-key the (encrypted) database.
   static const String rekey = 'rekey';
+
+  /// Close the connection and stop the worker.
   static const String close = 'close';
 }
 
