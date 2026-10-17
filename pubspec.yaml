@@ -1,7 +1,7 @@
 name: the_forge_ecosystem
 description: Monorepo workspace root for the Forge ecosystem (fetch + SQLite packages).
 publish_to: none
-repository: https://github.com/albetnov/the_forge_ecosystem
+repository: https://github.com/albetnov/forge-flutter
 
 environment:
   sdk: ^3.13.4

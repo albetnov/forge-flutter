@@ -4,9 +4,9 @@ description: >-
   classes, expressions are a sealed hierarchy, and every runtime value is bound
   as a parameter rather than inlined into SQL.
 version: 0.1.0
-repository: https://github.com/albetnov/the_forge_ecosystem/tree/main/packages/sqlite_query_forge
-homepage: https://github.com/albetnov/the_forge_ecosystem
-issue_tracker: https://github.com/albetnov/the_forge_ecosystem/issues
+repository: https://github.com/albetnov/forge-flutter/tree/main/packages/sqlite_query_forge
+homepage: https://github.com/albetnov/forge-flutter
+issue_tracker: https://github.com/albetnov/forge-flutter/issues
 
 environment:
   sdk: ^3.13.4

@@ -1,7 +1,7 @@
 name: Docs (GitHub Pages)
 
 # Builds the Astro docs site (static / SSG) under `docs/` and publishes it to
-# GitHub Pages: https://albetnov.github.io/the_forge_ecosystem/
+# GitHub Pages: https://albetnov.github.io/forge-flutter/
 on:
   push:
     branches:
