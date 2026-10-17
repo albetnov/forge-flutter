@@ -10,19 +10,25 @@ import 'package:sqlite_schema_forge/sqlite_schema_forge.dart' as schema;
 
 import 'executor.dart';
 
+/// The schema package's column type, aliased to avoid a name clash.
 typedef SchemaColumn = schema.Column;
 
+/// The schema package's table type, aliased to avoid a name clash.
 typedef SchemaTable = schema.Table;
 
+/// The schema package's data type, aliased to avoid a name clash.
 typedef SchemaDataType = schema.DataType;
 
+/// The schema package's raw-SQL default, aliased to avoid a name clash.
 typedef SchemaRawSql = schema.RawSql;
 
+/// The schema package's migration schema, aliased to avoid a name clash.
 typedef MigrationSchema = schema.Schema;
 
 /// A [ForgeExecutor] presented as a `DatabaseExecutor`, so one driver adapter
 /// serves both the query builder and the migrator.
 final class ForgeDatabaseExecutor implements schema.DatabaseExecutor {
+  /// Wraps a [ForgeExecutor] as a `DatabaseExecutor`.
   ForgeDatabaseExecutor(this._executor);
 
   final ForgeExecutor _executor;
