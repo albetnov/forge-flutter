@@ -64,6 +64,11 @@ final class SqliteDriverConfig {
   /// passing the password per-`connect()` call and disposing it afterwards.
   final SecurePassword? cipher;
 
+  /// Creates a config for a file at [path], or an in-memory database when
+  /// [path] is `null`.
+  ///
+  /// See each field for its default. For a strictly in-memory database use
+  /// [SqliteDriverConfig.inMemory] instead.
   const SqliteDriverConfig({
     required this.path,
     this.readOnly = false,
