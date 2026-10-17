@@ -1,12 +1,13 @@
 name: Dart CI
 
 # Runs the Dart/Flutter test suites for the packages on `main` and for every
-# release tag. Release tags are `<version>-<suffix>`, one suffix per package:
+# release tag. Melos tags a release of one package as `<package>-v<version>`,
+# so a tag maps to exactly one package:
 #
-#   *-query   -> sqlite_query_forge
-#   *-fetch   -> fetch_forge
-#   *-schema  -> sqlite_schema_forge
-#   *-driver  -> sqlite3_driver_forge
+#   fetch_forge-v*           -> fetch_forge
+#   sqlite_schema_forge-v*   -> sqlite_schema_forge
+#   sqlite_query_forge-v*    -> sqlite_query_forge
+#   sqlite3_driver_forge-v*  -> sqlite3_driver_forge
 #
 # SECURITY: there is deliberately no `pull_request` trigger here. Executing
 # code from a fork that targets `main` would run untrusted code on our
@@ -17,10 +18,10 @@ on:
     branches:
       - main
     tags:
-      - '*-query'
-      - '*-fetch'
-      - '*-schema'
-      - '*-driver'
+      - 'fetch_forge-v*'
+      - 'sqlite_schema_forge-v*'
+      - 'sqlite_query_forge-v*'
+      - 'sqlite3_driver_forge-v*'
   workflow_dispatch:
 
 permissions:
@@ -44,11 +45,11 @@ jobs:
         run: |
           if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
             case "${GITHUB_REF_NAME}" in
-              *-query)  packages='["sqlite_query_forge"]' ;;
-              *-fetch)  packages='["fetch_forge"]' ;;
-              *-schema) packages='["sqlite_schema_forge"]' ;;
-              *-driver) packages='["sqlite3_driver_forge"]' ;;
-              *)        packages='[]' ;;
+              fetch_forge-v*)          packages='["fetch_forge"]' ;;
+              sqlite_schema_forge-v*)  packages='["sqlite_schema_forge"]' ;;
+              sqlite_query_forge-v*)   packages='["sqlite_query_forge"]' ;;
+              sqlite3_driver_forge-v*) packages='["sqlite3_driver_forge"]' ;;
+              *)                       packages='[]' ;;
             esac
           else
             packages='["sqlite_schema_forge","sqlite_query_forge","sqlite3_driver_forge","fetch_forge"]'
