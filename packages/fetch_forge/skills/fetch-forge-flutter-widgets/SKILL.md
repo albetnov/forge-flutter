@@ -55,6 +55,13 @@ disposes the client — the creator owns it (app-lifetime is fine).
 
 ## Notes for agents
 
+- Fetchers must be referentially stable. `QueryBuilder` recreates its
+  query whenever `fetcher` changes identity (`didUpdateWidget`), and a
+  fresh query starts with no data — so an inline closure as `fetcher`
+  refetches from a cold snapshot on every parent rebuild. In a form that
+  rebuilds per keystroke, typing flashes the whole subtree back to
+  loading. Pass a top-level function or a method tear-off; only `builder`
+  may be an inline closure.
 - Two builders under one scope watching one key produce **one** network
   call and both settle — that is the canonical scope test.
 - The refresh effect skips its first run (binding already fetched) and
