@@ -192,6 +192,84 @@ void main() {
     });
   });
 
+  group('extend', () {
+    MigrationSchema base() => schemaOf(
+      version: 1,
+      tables: [
+        DeclaredTable('accounts', [Column.id()]),
+        DeclaredTable('transactions', [Column.id()]),
+      ],
+    );
+
+    test('attaches indexes to the named tables', () {
+      final extended = base().extend(
+        indexes: {
+          'accounts': [SchemaIndex(columns: ['account_type'])],
+        },
+      );
+      expect(
+        extended.tables
+            .firstWhere((t) => t.name == 'accounts')
+            .indexes
+            .map((i) => i.toSql('accounts')),
+        [
+          'CREATE INDEX IF NOT EXISTS "idx_accounts_account_type" '
+              'ON "accounts" ("account_type");',
+        ],
+      );
+      expect(
+        extended.tables
+            .firstWhere((t) => t.name == 'transactions')
+            .indexes,
+        isEmpty,
+      );
+    });
+
+    test('an unknown table name throws rather than dropping the index', () {
+      expect(
+        () => base().extend(
+          indexes: {
+            'nope': [SchemaIndex(columns: ['x'])],
+          },
+        ),
+        throwsStateError,
+      );
+    });
+
+    test('appends virtual tables and triggers, keeping the version', () {
+      final extended = base().extend(
+        virtualTables: [
+          SchemaVirtualTable.fts5(
+            'transactions_fts',
+            columns: ['payee'],
+            contentTable: 'transactions',
+          ),
+        ],
+        triggers: [
+          SchemaTrigger(
+            name: 't',
+            timing: sf.TriggerTiming.after,
+            event: sf.TriggerEvent.insert,
+            targetTable: 'transactions',
+            body: 'SELECT 1;',
+          ),
+        ],
+      );
+      expect(extended.version, 1);
+      expect(extended.virtualTables.map((v) => v.name), ['transactions_fts']);
+      expect(extended.virtualTables.single.contentRowId, 'id');
+      expect(extended.triggers.map((t) => t.name), ['t']);
+    });
+
+    test('an empty extend keeps the schema as is', () {
+      final extended = base().extend();
+      expect(extended.version, 1);
+      expect(extended.tables.map((t) => t.name), ['accounts', 'transactions']);
+      expect(extended.virtualTables, isEmpty);
+      expect(extended.triggers, isEmpty);
+    });
+  });
+
   group('columns as a declaration', () {
     test('the plain Column stays usable in a query', () {
       final q = SelectStatement(

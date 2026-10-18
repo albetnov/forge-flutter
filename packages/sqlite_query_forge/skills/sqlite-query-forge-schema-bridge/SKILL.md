@@ -27,7 +27,7 @@ await SqliteSchemaForge.migrate(db: ForgeDatabaseExecutor(myForgeExecutor), targ
 
 - `Table(tableName, mapper:)`: `mapper` is `Map<String,Object?> → T`. Getters return `const Column.*` (typed `Column<int>` etc., listed as `Column<Object>` in `columns`).
 - Only typed factories are migratable (`id/integer/text/dateTime/real/blob`). Plain `Column('x')` has `type == null`.
-- `schemaOf(version:, tables:)` → `sqlite_schema_forge` `Schema` (aliased `MigrationSchema`; no direct import of the schema package needed — bridge typedefs `SchemaColumn/SchemaTable/SchemaDataType/SchemaRawSql` avoid the `Column`/`Table` name clash).
+- `schemaOf(version:, tables:)` → `sqlite_schema_forge` `Schema` (aliased `MigrationSchema`; no direct import of the schema package needed — bridge typedefs `SchemaColumn/SchemaTable/SchemaDataType/SchemaRawSql/SchemaIndex/SchemaVirtualTable/SchemaTrigger` avoid the `Column`/`Table` name clash).
 - `ForgeDatabaseExecutor(forgeExecutor)` adapts `ForgeExecutor` → `DatabaseExecutor` (`rawQuery`→`query`, `execute`→`execute`, `transaction` wraps txn). Use it so queries and migrations share one connection/txn semantics.
 
 ## Instance management
@@ -45,4 +45,4 @@ nothing; dispose the underlying driver, never the wrapper.
 
 - `columns == []` (default) means query-only: `toSchemaTable()`/`schemaOf()` throw `StateError` (`declares no columns, so it cannot be created`). Workaround: leave empty for join-only/projection tables; list every persisted column otherwise.
 - Typeless column throws: `declares no type. Build it with Column.integer, Column.text, ...`. Workaround: switch plain `Column('x')` getters used in migrations to typed factories; keep plain ones only for query-only tables.
-- `schemaOf` covers tables only — indexes come from the schema side (`Table(name, cols, indexes:)` there) or are added to the target `Schema` by hand; virtual tables/triggers are schema-side-only and never come from `columns`.
+- `.extend(indexes:, virtualTables:, triggers:)` completes the schema with the pieces `columns` doesn't carry: indexes keyed by table name (unknown names throw `StateError`), appended virtual tables/triggers. `version` passes through.

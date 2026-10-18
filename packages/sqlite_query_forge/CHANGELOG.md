@@ -1,3 +1,10 @@
+## 0.4.0
+
+- `MigrationSchema.extend(indexes:, virtualTables:, triggers:)`: completes a
+  `schemaOf` schema with indexes (keyed by table name, unknown names throw),
+  virtual tables, and triggers. New `SchemaIndex` / `SchemaVirtualTable` /
+  `SchemaTrigger` typedefs so no schema-package import is needed.
+
 ## 0.3.0
 
 - `Column.text` takes `primaryKey`, matching `Column.integer` — for TEXT

@@ -25,6 +25,58 @@ typedef SchemaRawSql = schema.RawSql;
 /// The schema package's migration schema, aliased to avoid a name clash.
 typedef MigrationSchema = schema.Schema;
 
+/// An index over a table's columns, aliased to avoid importing the schema
+/// package where only the query side is otherwise needed.
+typedef SchemaIndex = schema.Index;
+
+/// A virtual table (e.g. FTS5), aliased like the other schema types.
+typedef SchemaVirtualTable = schema.VirtualTable;
+
+/// A trigger, aliased like the other schema types.
+typedef SchemaTrigger = schema.Trigger;
+
+/// Completes a [MigrationSchema] with the schema-side pieces table
+/// declarations don't carry: indexes on declared tables, virtual tables,
+/// and triggers.
+extension MigrationSchemaExtend on MigrationSchema {
+  /// Returns this schema with [indexes] attached to the named tables and
+  /// [virtualTables] and [triggers] appended. [version] passes through
+  /// untouched.
+  ///
+  /// An [indexes] key naming no declared table throws a [StateError] rather
+  /// than silently dropping the index.
+  MigrationSchema extend({
+    Map<String, List<SchemaIndex>> indexes = const {},
+    List<SchemaVirtualTable> virtualTables = const [],
+    List<SchemaTrigger> triggers = const [],
+  }) {
+    final pending = Map.of(indexes);
+    final tables = <SchemaTable>[];
+    for (final table in this.tables) {
+      final tableIndexes = pending.remove(table.name);
+      tables.add(
+        tableIndexes == null
+            ? table
+            : SchemaTable(table.name, table.columns, indexes: [
+                ...table.indexes,
+                ...tableIndexes,
+              ]),
+      );
+    }
+    if (pending.isNotEmpty) {
+      throw StateError(
+        'extend() names unknown tables: ${pending.keys.join(', ')}.',
+      );
+    }
+    return MigrationSchema(
+      version: version,
+      tables: tables,
+      virtualTables: [...this.virtualTables, ...virtualTables],
+      triggers: [...this.triggers, ...triggers],
+    );
+  }
+}
+
 /// A [ForgeExecutor] presented as a `DatabaseExecutor`, so one driver adapter
 /// serves both the query builder and the migrator.
 final class ForgeDatabaseExecutor implements schema.DatabaseExecutor {

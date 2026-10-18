@@ -1,3 +1,8 @@
+## 0.1.3
+
+- Widens `sqlite_query_forge` to `^0.4.0` (`MigrationSchema.extend`).
+  No API change in this package.
+
 ## 0.1.2
 
 - Widens `sqlite_query_forge` to `^0.3.0` (`Column.text` primary key flag).
