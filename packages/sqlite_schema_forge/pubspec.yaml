@@ -3,7 +3,7 @@ description: >-
   Declarative SQLite schema and auto-migration for Dart: define tables as
   immutable objects and let the differ plan and apply safe CREATE, ALTER, and
   rebuild steps.
-version: 0.1.0
+version: 0.1.1
 repository: https://github.com/albetnov/forge-flutter/tree/main/packages/sqlite_schema_forge
 homepage: https://github.com/albetnov/forge-flutter
 issue_tracker: https://github.com/albetnov/forge-flutter/issues

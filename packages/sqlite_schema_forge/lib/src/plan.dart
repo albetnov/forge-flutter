@@ -68,6 +68,9 @@ final class MigrationPlan {
   /// True if any step drops columns/tables or performs a table copy-swap
   bool get hasDestructiveChanges => steps.any((s) => s.isDestructive);
 
-  /// True if current version equals target version
-  bool get isUpToDate => steps.isEmpty;
+  /// True when the database version matches the target and there is no
+  /// structural drift. A version gap alone (even with zero DDL steps, e.g. a
+  /// data-only or column-affinity migration handled by `onUpgrade`) counts
+  /// as out of date.
+  bool get isUpToDate => fromVersion == toVersion && steps.isEmpty;
 }
