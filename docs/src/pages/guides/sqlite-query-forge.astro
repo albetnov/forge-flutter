@@ -113,6 +113,23 @@ await SqliteSchemaForge.migrate(
   db: ForgeDatabaseExecutor(forge),
   targetSchema: targetSchema,
 );`;
+const exprSnippet = `// FTS5 search: same shape as like, pattern bound as ?.
+await forge.selectFrom(users).where(users.name.match('ada*')).getMany();
+
+// Conditional aggregate: results render as references when Expression,
+// bind as ? otherwise; null orElse omits ELSE.
+final activeTotal = FunctionCall('SUM', [
+  CaseWhen([WhenBranch(users.isActive.eq(true), users.amount)], const Lit(0)),
+]);`;
+const extendSnippet = `// TEXT primary keys (e.g. a settings key):
+Column<String> get key => const Column.text('key', primaryKey: true);
+
+// Complete a schemaOf schema with what table columns don't carry:
+final target = schemaOf(version: 3, tables: [users]).extend(
+  indexes: {'users': [const SchemaIndex(columns: ['email'])]},
+  virtualTables: [fts],
+  triggers: [ftsTrigger],
+); // Unknown index table names throw StateError.`;
 const adapterSnippet = `final class SqfliteExecutor implements ForgeExecutor {
   SqfliteExecutor(this._db);
 
@@ -411,7 +428,7 @@ const skillsCmd = `dart run skills@ get`;
           package, with no bundled driver and no code generation.
         </p>
         <div class="meta">
-          <span class="ver">0.1.0</span>
+          <span class="ver">0.4.0</span>
           <a href="https://pub.dev/packages/sqlite_query_forge">pub.dev</a>
           <a href="https://github.com/albetnov/forge-flutter/tree/main/packages/sqlite_query_forge">README source</a>
         </div>
@@ -482,6 +499,14 @@ const skillsCmd = `dart run skills@ get`;
             <figcaption><span>left join with alias</span><button class="copy" data-copy="code-join">Copy</button></figcaption>
             <pre><code id="code-join" set:html={highlight(joinSnippet)} /></pre>
           </figure>
+          <h3>Search and conditional expressions</h3>
+          <p>
+            Since 0.2.0 <code class="inline">match()</code> covers FTS5 patterns alongside <code class="inline">like</code>, <code class="inline">CaseWhen</code> builds <code class="inline">CASE WHEN … ELSE … END</code> for conditional aggregates, and <code class="inline">Lit</code> wraps a static value where an expression position needs one (for example inside <code class="inline">FunctionCall</code>).
+          </p>
+          <figure class="code">
+            <figcaption><span>match, case, literal</span><button class="copy" data-copy="code-expr">Copy</button></figcaption>
+            <pre><code id="code-expr" set:html={highlight(exprSnippet)} /></pre>
+          </figure>
         </section>
 
         <section class="block" id="writes" aria-labelledby="writes-h">
@@ -530,11 +555,15 @@ const skillsCmd = `dart run skills@ get`;
         <section class="block" id="bridge" aria-labelledby="bridge-h">
           <h2 id="bridge-h">Bridge back to schema</h2>
           <p>
-            Columns can also declare how they are created, so the query path and the migration path read one declaration: the named constructors (<code class="inline">Column.id</code>, <code class="inline">.integer</code>, <code class="inline">.text</code>) attach DDL flags to the very column the queries use. <code class="inline">schemaOf</code> collects tables under one version, and <code class="inline">ForgeDatabaseExecutor</code> presents a <code class="inline">ForgeExecutor</code> as the migrator's <code class="inline">DatabaseExecutor</code>, so one adapter drives both halves.
+            Columns can also declare how they are created, so the query path and the migration path read one declaration: the named constructors (<code class="inline">Column.id</code>, <code class="inline">.integer</code>, <code class="inline">.text</code>) attach DDL flags to the very column the queries use. Since 0.3.0 <code class="inline">Column.text</code> also takes <code class="inline">primaryKey</code> for TEXT keys. <code class="inline">schemaOf</code> collects tables under one version, and <code class="inline">ForgeDatabaseExecutor</code> presents a <code class="inline">ForgeExecutor</code> as the migrator's <code class="inline">DatabaseExecutor</code>, so one adapter drives both halves. Since 0.4.0 <code class="inline">extend()</code> completes that schema with indexes, virtual tables, and triggers via the <code class="inline">SchemaIndex</code> / <code class="inline">SchemaVirtualTable</code> / <code class="inline">SchemaTrigger</code> typedefs, no schema-package import needed.
           </p>
           <figure class="code">
             <figcaption><span>migrate what you query</span><button class="copy" data-copy="code-bridge">Copy</button></figcaption>
             <pre><code id="code-bridge" set:html={highlight(bridgeSnippet)} /></pre>
+          </figure>
+          <figure class="code">
+            <figcaption><span>keys and schema extras</span><button class="copy" data-copy="code-extend">Copy</button></figcaption>
+            <pre><code id="code-extend" set:html={highlight(extendSnippet)} /></pre>
           </figure>
           <p>The adapter itself is one small class over the binding in use:</p>
           <figure class="code">

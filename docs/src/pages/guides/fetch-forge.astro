@@ -15,7 +15,7 @@ function highlight(src) {
 }
 const installYaml = `dependencies:
   fetch_forge: ^0.1.0
-  signals: ^7.0.0`;
+  signals: ^7.1.0`;
 const installPath = `dependencies:
   fetch_forge:
     path: ../fetch_forge`;
@@ -508,7 +508,7 @@ const skillsCmd = `dart run skills@ get`;
             <pre><code id="code-fq" set:html={highlight(fqBuilder)} /></pre>
           </figure>
           <p>
-            A <code class="inline">refresh</code> signal forces a refetch of the current variables when bumped. When the widget's arguments change, the old query no longer describes the request, so the state disposes it and builds a new one; unmount disposes bindings and query together. The layer stays thin: nothing here you could not write with <code class="inline">Query</code>, <code class="inline">bind</code>, and <code class="inline">SignalBuilder</code> in about twenty lines, and the core never imports Flutter.
+            A <code class="inline">refresh</code> signal forces a refetch of the current variables when bumped. When the widget's arguments change, the old query no longer describes the request, so the state disposes it and builds a new one; unmount disposes bindings and query together. Keep <code class="inline">fetcher</code> referentially stable (a top-level function or tear-off, not an inline closure): a new fetcher identity recreates the query with no data, so a parent rebuilding per keystroke flashes the subtree back to loading. Only <code class="inline">builder</code> may be inline. The layer stays thin: nothing here you could not write with <code class="inline">Query</code>, <code class="inline">bind</code>, and <code class="inline">SignalBuilder</code> in about twenty lines, and the core never imports Flutter.
           </p>
           <figure class="code">
             <figcaption><span>run the demo app</span><button class="copy" data-copy="code-demo">Copy</button></figcaption>

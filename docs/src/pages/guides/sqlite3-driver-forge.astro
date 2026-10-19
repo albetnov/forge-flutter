@@ -325,7 +325,7 @@ const skillsCmd = `dart run skills@ get`;
           both forge executor contracts at once, with SQLCipher support.
         </p>
         <div class="meta">
-          <span class="ver">0.1.0</span>
+          <span class="ver">0.1.3</span>
           <a href="https://pub.dev/packages/sqlite3_driver_forge">pub.dev</a>
           <a href="https://github.com/albetnov/forge-flutter/tree/main/packages/sqlite3_driver_forge">README source</a>
         </div>
@@ -345,7 +345,7 @@ const skillsCmd = `dart run skills@ get`;
         <section class="block" id="install" aria-labelledby="install-h">
           <h2 id="install-h">Install the line</h2>
           <p>
-            One dependency on top of <code class="inline">package:sqlite3</code>. One instance serves both packages, so import one of the two clashing <code class="inline">Table</code>/<code class="inline">Column</code> definitions with a prefix:
+            One dependency on top of <code class="inline">package:sqlite3</code>, following <code class="inline">sqlite_query_forge ^0.4.0</code> and <code class="inline">sqlite_schema_forge ^0.1.0</code> with no API change of its own. One instance serves both packages, so import one of the two clashing <code class="inline">Table</code>/<code class="inline">Column</code> definitions with a prefix:
           </p>
           <figure class="code">
             <figcaption><span>terminal</span><button class="copy" data-copy="code-install">Copy</button></figcaption>

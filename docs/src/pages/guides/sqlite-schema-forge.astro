@@ -48,6 +48,7 @@ const upgradeSnippet = `final result = await SqliteSchemaForge.migrate(
   db: db,
   targetSchema: appSchemaV2,
   allowDestructive: true, // Required for column removals or type modifications
+  disableForeignKeys: true, // Suspend FK enforcement around rebuilds + data moves
   onUpgrade: (db, from, to) async {
     if (from == 1 && to >= 2) {
       // Phase 1: Transform existing data before structural table rebuild
@@ -378,7 +379,7 @@ const skillsCmd = `dart run skills@ get`;
           raw CREATE TABLE strings.
         </p>
         <div class="meta">
-          <span class="ver">0.1.0</span>
+          <span class="ver">0.1.1</span>
           <a href="https://pub.dev/packages/sqlite_schema_forge">pub.dev</a>
           <a href="https://github.com/albetnov/forge-flutter/tree/main/packages/sqlite_schema_forge">README source</a>
         </div>
@@ -436,7 +437,7 @@ const skillsCmd = `dart run skills@ get`;
           </p>
           <h3>Transform data around structure</h3>
           <p>
-            When a structural change needs data work first (splitting a column, formatting before a type change), <code class="inline">onUpgrade</code> and <code class="inline">onDowngrade</code> run inside the migration. Destructive steps require opting in with <code class="inline">allowDestructive</code>.
+            When a structural change needs data work first (splitting a column, formatting before a type change), <code class="inline">onUpgrade</code> and <code class="inline">onDowngrade</code> run inside the migration transaction. Destructive steps require opting in with <code class="inline">allowDestructive</code>. Since 0.1.1 a version gap alone counts as out of date, so data-only callbacks and the <code class="inline">PRAGMA user_version</code> stamp run even when the plan has no DDL steps; pass <code class="inline">disableForeignKeys: true</code> to suspend FK enforcement around the migration when data moves or rebuilds would trip transient violations.
           </p>
           <figure class="code">
             <figcaption><span>upgrade with data work</span><button class="copy" data-copy="code-upgrade">Copy</button></figcaption>
