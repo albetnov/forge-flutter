@@ -1,6 +1,6 @@
 ---
 name: fetch-forge-flutter-widgets
-description: Flutter layer. QueryBuilder props and lifecycle, QueryScope sharing, refresh signal, disposal, thin-layer rule and testing.
+description: Flutter layer. QueryBuilder and MutationBuilder props and lifecycle, QueryScope sharing, refresh and trigger signals, disposal, thin-layer rule and testing.
 ---
 
 # Flutter layer
@@ -53,6 +53,46 @@ throws a descriptive `StateError`. `updateShouldNotify` fires on client
 identity change, which rebuilds consumers' queries. The scope never
 disposes the client — the creator owns it (app-lifetime is fine).
 
+## `MutationBuilder<T, V>`
+
+Owns a `Mutation` and rebuilds from its signals. The builder callback gets a
+`MutationView<T, V>`, not the mutation itself: the view carries the signals
+(`status`, `data`, `error`, `stackTrace`, `isPending`, `isSuccess`,
+`isError`) and the calls (`mutate`, `mutateAsync`, `reset`,
+`invalidateCache`), and hides `dispose` so the widget-owned mutation cannot
+be killed from outside.
+
+```dart
+MutationBuilder<int, String>(
+  mutator: createUser,
+  builder: (context, mutation) => ElevatedButton(
+    onPressed: () => mutation.mutate('ada').ignore(),
+    child: Text(mutation.isPending.value ? 'Saving...' : 'Save'),
+  ),
+);
+```
+
+| Prop | Meaning |
+| --- | --- |
+| `mutator`, `builder` (required) | Async fn, `Widget Function(BuildContext, MutationView<T, V>)`. |
+| `client` | Shared cache. Default: nearest `QueryScope`. Neither: private client owned by the mutation. |
+| `retry`, `cacheDuration`, `cacheKey` | Passed straight to the owned mutation. |
+| `variables` (`ReadonlySignal<V>?`) | The variables a `trigger` runs the write with. Read with `peek`, so a change never writes on its own. |
+| `trigger` (`ReadonlySignal<Object?>?`) | Any bump starts the write with the current `variables`. Requires `variables`. The first run is skipped — a trigger is a bump, not an initial value. |
+
+Two ways to start a write: the builder calls `mutation.mutate(...)`, or a
+parent bumps `trigger` and the widget writes with the current `variables`.
+Both are available at the same time.
+
+Lifecycle: created in `didChangeDependencies` (scope must be readable);
+`mutator`, `client`, `retry`, `cacheDuration` or `cacheKey` changing
+identity disposes the old mutation and builds a new one in
+`didUpdateWidget`; changing `builder`, `variables` or `trigger` keeps the
+mutation, so its state and result survive. Unmount stops the trigger effect
+and disposes the mutation. Rebuilds go through `SignalBuilder` with the
+**named** `builder` parameter and `dependencies` on `status`, `data` and
+`error`, so the subtree rebuilds on every state change.
+
 ## Notes for agents
 
 - Fetchers must be referentially stable. `QueryBuilder` recreates its
@@ -62,6 +102,8 @@ disposes the client — the creator owns it (app-lifetime is fine).
   rebuilds per keystroke, typing flashes the whole subtree back to
   loading. Pass a top-level function or a method tear-off; only `builder`
   may be an inline closure.
+- The same holds for `mutator`: a new identity restarts the write from
+  idle. Keep it referentially stable too.
 - Two builders under one scope watching one key produce **one** network
   call and both settle — that is the canonical scope test.
 - The refresh effect skips its first run (binding already fetched) and

@@ -1,8 +1,9 @@
 # fetch_forge — remaining work
 
 Shipped: `0.1.0` — `Query`, `Mutation`, `AsyncValue`, `QueryClient`,
-`RetryPolicy`, `QueryBuilder`, `QueryScope`, CLI + Flutter examples.
-167 tests green via `flutter test`. Everything else in the original brief
+`RetryPolicy`, `QueryBuilder`, `MutationBuilder`, `QueryScope`, CLI + Flutter
+examples.
+176 tests green via `flutter test`. Everything else in the original brief
 is built (including the decided deviations: no `Mutation.snapshot`, bare
 `dart test` superseded by `flutter test`, `invalidateCache` instead of the
 version-signal recipe, minimal android+web example shells); this file keeps

@@ -100,6 +100,26 @@ QueryScope(
     },
   ),
 );`;
+const fqMutation = `MutationBuilder<int, String>(
+  mutator: createUser,
+  builder: (context, mutation) => ElevatedButton(
+    onPressed: () => mutation.mutate('ada').ignore(),
+    child: Text(mutation.isPending.value ? 'Saving...' : 'Save'),
+  ),
+);`;
+const fqTrigger = `final submit = signal(0);
+final name = signal('ada');
+
+MutationBuilder<int, String>(
+  mutator: createUser,
+  variables: name,   // the variables the write runs with
+  trigger: submit,   // any bump starts the write
+  builder: (context, mutation) => Text(
+    mutation.isPending.value ? 'Saving...' : 'Save',
+  ),
+);
+
+submit.value++; // The write runs with 'name.value'.`;
 const demoCmd = `cd example/app && flutter run -d chrome`;
 const recipeOpt = `final page = signal(1);
 query.setData([...query.data.value ?? const [], newUser], page.value);
@@ -501,7 +521,7 @@ const skillsCmd = `dart run skills@ get`;
         <section class="block" id="flutter" aria-labelledby="flutter-h">
           <h2 id="flutter-h">In Flutter widgets</h2>
           <p>
-            The Flutter entrypoint (<code class="inline">package:fetch_forge/flutter.dart</code>) re-exports everything above and adds two widgets. <code class="inline">QueryBuilder</code> owns a query, binds it to a variables signal, and rebuilds from its snapshot; <code class="inline">QueryScope</code> shares one client with a subtree, so two builders watching the same variables share one fetch and settle together.
+            The Flutter entrypoint (<code class="inline">package:fetch_forge/flutter.dart</code>) re-exports everything above and adds three widgets. <code class="inline">QueryBuilder</code> owns a query, binds it to a variables signal, and rebuilds from its snapshot; <code class="inline">QueryScope</code> shares one client with a subtree, so two builders watching the same variables share one fetch and settle together; <code class="inline">MutationBuilder</code> owns a mutation and rebuilds from its signals.
           </p>
           <figure class="code">
             <figcaption><span>builder and scope</span><button class="copy" data-copy="code-fq">Copy</button></figcaption>
@@ -510,6 +530,21 @@ const skillsCmd = `dart run skills@ get`;
           <p>
             A <code class="inline">refresh</code> signal forces a refetch of the current variables when bumped. When the widget's arguments change, the old query no longer describes the request, so the state disposes it and builds a new one; unmount disposes bindings and query together. Keep <code class="inline">fetcher</code> referentially stable (a top-level function or tear-off, not an inline closure): a new fetcher identity recreates the query with no data, so a parent rebuilding per keystroke flashes the subtree back to loading. Only <code class="inline">builder</code> may be inline. The layer stays thin: nothing here you could not write with <code class="inline">Query</code>, <code class="inline">bind</code>, and <code class="inline">SignalBuilder</code> in about twenty lines, and the core never imports Flutter.
           </p>
+          <h3>Writing from a widget</h3>
+          <p>
+            Writes have the same shape. <code class="inline">MutationBuilder</code> owns the mutation, hands its builder a <code class="inline">MutationView</code> — the mutation's signals plus the calls that start a write — and disposes everything on unmount, so no widget owns a mutation by hand.
+          </p>
+          <figure class="code">
+            <figcaption><span>write from a widget</span><button class="copy" data-copy="code-fqm">Copy</button></figcaption>
+            <pre><code id="code-fqm" set:html={highlight(fqMutation)} /></pre>
+          </figure>
+          <p>
+            A <code class="inline">trigger</code> signal starts the write declaratively: any bump runs it with the current <code class="inline">variables</code>, so a parent drives the write by bumping a signal instead of wiring a callback. The first run is skipped — a trigger is a bump, not an initial value — and the variables are read without subscribing, so a variables change alone never writes.
+          </p>
+          <figure class="code">
+            <figcaption><span>a trigger drives the write</span><button class="copy" data-copy="code-fqt">Copy</button></figcaption>
+            <pre><code id="code-fqt" set:html={highlight(fqTrigger)} /></pre>
+          </figure>
           <figure class="code">
             <figcaption><span>run the demo app</span><button class="copy" data-copy="code-demo">Copy</button></figcaption>
             <pre><code id="code-demo" set:html={highlight(demoCmd)} /></pre>
@@ -577,7 +612,7 @@ const skillsCmd = `dart run skills@ get`;
               <tr><th scope="row">fetch-forge-mutation</th><td>One-shot writes: mutate vs mutateAsync, reset, cache invalidation, disposal.</td></tr>
               <tr><th scope="row">fetch-forge-cache-keys</th><td>Variables are the cache key: equality rules, CacheKeyError, the cacheKey mapper.</td></tr>
               <tr><th scope="row">fetch-forge-client-retry</th><td>Supporting types: QueryClient cache, CacheEntry expiry, RetryPolicy, AsyncValue.</td></tr>
-              <tr><th scope="row">fetch-forge-flutter-widgets</th><td>The Flutter layer: QueryBuilder, QueryScope, the refresh signal, disposal, testing.</td></tr>
+              <tr><th scope="row">fetch-forge-flutter-widgets</th><td>The Flutter layer: QueryBuilder, MutationBuilder, QueryScope, the refresh and trigger signals, disposal, testing.</td></tr>
             </tbody>
           </table>
           <div class="note">

@@ -75,6 +75,8 @@ dependencies:
 | `RetryPolicy` | How a failed call is retried: an attempt cap, a backoff, an optional predicate, and `run` to execute the loop. |
 | `CacheEntry<T>` | One cached result: the value, the moment it was written, and an optional expiry set by the writer. |
 | `QueryBuilder<T, V>` | A widget that owns a `Query`, binds it to a variables signal and builds from its snapshot; a `refresh` signal forces a refetch. |
+| `MutationBuilder<T, V>` | A widget that owns a `Mutation` and builds from its signals; a `trigger` signal starts the write declaratively. |
+| `MutationView<T, V>` | The read-only view a `MutationBuilder` hands to its builder: the mutation's signals, the calls that start a write, and the calls that tidy up after it. |
 | `QueryScope` | An `InheritedWidget` that shares one `QueryClient` with the builders below it. |
 | `cacheKeyFor` | Turns query variables into a cache key, and refuses a key that cannot be compared structurally. |
 | `CacheKeyError` | The debug-mode error that tells you exactly which variables are broken and how to fix them. |
@@ -232,10 +234,11 @@ leaving the cache alone.
 ## Flutter
 
 The Flutter entrypoint (`package:fetch_forge/flutter.dart`) re-exports
-everything on this page and adds two widgets. `QueryBuilder` owns a `Query`,
+everything on this page and adds three widgets. `QueryBuilder` owns a `Query`,
 binds it to a variables signal and rebuilds from its snapshot through
 signals; `QueryScope` shares one `QueryClient` with a subtree, so two
-builders watching the same variables share one fetch and settle together.
+builders watching the same variables share one fetch and settle together;
+`MutationBuilder` owns a `Mutation` and rebuilds from its signals.
 
 ```dart
 final page = signal(1);
@@ -262,10 +265,74 @@ signal — the old query no longer describes the request, so the state
 disposes it and builds a new one in `didUpdateWidget`. Unmount disposes the
 bindings and the query together.
 
+### Writing from a widget
+
+`MutationBuilder` is the same idea for a write: it owns the mutation, hands
+its builder a `MutationView` — the mutation's signals plus the calls that
+start a write — and disposes everything on unmount.
+
+```dart
+MutationBuilder<int, String>(
+  mutator: createUser,
+  builder: (context, mutation) => ElevatedButton(
+    onPressed: () => mutation.mutate('ada').ignore(),
+    child: Text(mutation.isPending.value ? 'Saving...' : 'Save'),
+  ),
+);
+```
+
+The builder can also start the write declaratively: a `trigger` signal runs
+the write with the current `variables` whenever it is bumped, so a parent
+drives the write by bumping a signal instead of wiring a callback. The first
+run of the trigger is skipped — a trigger is a bump, not an initial value —
+and the variables are read without subscribing, so a variables change alone
+never writes.
+
+```dart
+final submit = signal(0);
+final name = signal('ada');
+
+MutationBuilder<int, String>(
+  mutator: createUser,
+  variables: name,
+  trigger: submit,
+  builder: (context, mutation) => Text(
+    mutation.isPending.value ? 'Saving...' : 'Save',
+  ),
+);
+
+submit.value++; // The write runs with `name.value`.
+```
+
+A write and a read meet in the shared client: the mutation caches what it
+wrote under its key, and `invalidateCache` drops that key and asks every
+query watching it to fetch again — the "write, then refetch" loop, with the
+mutation knowing nothing about queries.
+
+```dart
+QueryScope(
+  client: client,
+  child: MutationBuilder<List<String>, int>(
+    mutator: api.saveUsers,
+    cacheDuration: const Duration(minutes: 5),
+    builder: (context, mutation) => FilledButton(
+      onPressed: () => mutation
+          .mutateAsync(page.value)
+          .then<void>((_) => mutation.invalidateCache())
+          .ignore(),
+      child: const Text('Save'),
+    ),
+  ),
+);
+```
+
+The query and the mutation use the same variables, so they use the same key.
+
 The layer stays thin: nothing here you couldn't write with `Query` + `bind`
 + `SignalBuilder` in about twenty lines, and the core never imports Flutter.
 
-Run the demo in `example/app` — one shared client, paging and refresh:
+Run the demo in `example/app` — one shared client, paging, refresh, and a
+write that lands in the cache the query reads:
 
 ```sh
 cd example/app && flutter run -d chrome
