@@ -1,6 +1,6 @@
 # fetch_forge — remaining work
 
-Shipped: `0.1.0` — `Query`, `Mutation`, `AsyncValue`, `QueryClient`,
+Shipped: `0.2.0` — `Query`, `Mutation`, `AsyncValue`, `QueryClient`,
 `RetryPolicy`, `QueryBuilder`, `MutationBuilder`, `QueryScope`, CLI + Flutter
 examples.
 176 tests green via `flutter test`. Everything else in the original brief
@@ -9,12 +9,8 @@ is built (including the decided deviations: no `Mutation.snapshot`, bare
 version-signal recipe, minimal android+web example shells); this file keeps
 only what is open.
 
-## Open decisions
-
-1. **LICENSE vs `dart pub publish --dry-run`.** `LICENSE` was removed at
-   the human's instruction and `publish_to` is `none`, but pub still
-   hard-errors without a `LICENSE` file — so definition-of-done item 1
-   cannot pass. Either restore `LICENSE` or formally drop that item.
+`dart pub publish --dry-run` passes with 0 warnings for all four workspace
+packages, so nothing is left to unblock a release.
 
 ## Standing guards
 
