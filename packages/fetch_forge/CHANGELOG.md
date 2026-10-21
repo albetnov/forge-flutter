@@ -1,4 +1,4 @@
-## Unreleased
+## 0.2.0
 
 - `MutationBuilder<T, V>`: a Flutter widget that owns a `Mutation` and
   rebuilds from its signals. Its builder receives a `MutationView<T, V>` —
