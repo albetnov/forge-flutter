@@ -32,6 +32,28 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The docs, the skills and the version constraints must agree with the
+  # pubspecs before anything ships. The check is offline and needs no
+  # Flutter or Dart toolchain, so it runs as its own job.
+  #
+  # It runs on the same events as the tests: the workflow deliberately has
+  # no `pull_request` trigger, so the lint is the pre-publish gate rather
+  # than a pre-merge gate.
+  lint:
+    name: Lint docs and constraints
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Check the docs, skills and version constraints
+        run: python3 tool/release_status.py --lint
+
   # Decide which package(s) to test: a single package for a release tag, or
   # the whole workspace for a push to `main`.
   select:
