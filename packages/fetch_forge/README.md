@@ -50,8 +50,8 @@ From pub.dev:
 
 ```yaml
 dependencies:
-  fetch_forge: ^0.1.0
-  signals: ^7.0.0
+  fetch_forge: ^0.3.0
+  signals: ^7.1.0
 ```
 
 From this monorepo:
