@@ -3,7 +3,7 @@ description: >-
   Zero-cost declarative SQLite query builder for Dart: const columns, sealed
   expressions, and every runtime value bound as a parameter instead of inlined
   into SQL.
-version: 0.4.0
+version: 0.4.1
 repository: https://github.com/albetnov/forge-flutter/tree/main/packages/sqlite_query_forge
 homepage: https://github.com/albetnov/forge-flutter
 issue_tracker: https://github.com/albetnov/forge-flutter/issues

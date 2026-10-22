@@ -1,3 +1,14 @@
+## 0.4.1
+
+- Fixes immutable builders silently dropping state when chained in a
+  different order: `UpdateBuilder.values()` kept the filter only when
+  `where()` came last — `.where(...).values(...)` emitted an `UPDATE` with
+  no `WHERE`, updating every row. `UpdateBuilder.where()` and
+  `DeleteBuilder.where()` also dropped a preceding `returning()`, and
+  `InsertBuilder.values()` / `valuesAll()` dropped a preceding
+  `onConflict...()` clause. Every chaining method now forwards the state it
+  does not touch, so all call orders compile to the same SQL.
+
 ## 0.4.0
 
 - `MigrationSchema.extend(indexes:, virtualTables:, triggers:)`: completes a
