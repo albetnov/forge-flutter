@@ -52,8 +52,13 @@ final class InsertBuilder {
   });
 
   /// Column order follows the map's own order.
-  InsertBuilder values(Map<String, Object?> row) =>
-      InsertBuilder._(target, _executor, rows: [row], returning: _returning);
+  InsertBuilder values(Map<String, Object?> row) => InsertBuilder._(
+    target,
+    _executor,
+    rows: [row],
+    onConflict: _onConflict,
+    returning: _returning,
+  );
 
   /// Many rows in one statement. Every row must name the same columns, since
   /// SQLite takes a single column list for the whole `VALUES` list.
@@ -61,6 +66,7 @@ final class InsertBuilder {
     target,
     _executor,
     rows: List.of(rows),
+    onConflict: _onConflict,
     returning: _returning,
   );
 
@@ -205,13 +211,19 @@ final class UpdateBuilder {
       target,
       _executor,
       values: values,
+      where: _where,
       returning: _returning,
     );
   }
 
   /// A missing filter updates every row.
-  UpdateBuilder where(Expression condition) =>
-      UpdateBuilder._(target, _executor, values: _values, where: condition);
+  UpdateBuilder where(Expression condition) => UpdateBuilder._(
+    target,
+    _executor,
+    values: _values,
+    where: condition,
+    returning: _returning,
+  );
 
   /// With no prior [UpdateBuilder.where] it behaves as [where].
   UpdateBuilder andWhere(Expression condition) {
@@ -295,7 +307,7 @@ final class DeleteBuilder {
 
   /// A missing filter deletes every row.
   DeleteBuilder where(Expression condition) =>
-      DeleteBuilder._(target, _executor, where: condition);
+      DeleteBuilder._(target, _executor, where: condition, returning: _returning);
 
   /// With no prior [DeleteBuilder.where] it behaves as [where].
   DeleteBuilder andWhere(Expression condition) {

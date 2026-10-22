@@ -224,6 +224,30 @@ void main() {
       );
     });
 
+    test('values keeps a preceding onConflictIgnore', () {
+      final q = forge(driver())
+          .insertInto(users)
+          .onConflictIgnore()
+          .values({'email': 'ada@example.com'})
+          .compile();
+      expect(
+        q.sql,
+        'INSERT INTO "users" ("email") VALUES (?) ON CONFLICT DO NOTHING',
+      );
+    });
+
+    test('valuesAll keeps a preceding onConflictIgnore', () {
+      final q = forge(driver()).insertInto(users).onConflictIgnore().valuesAll([
+        {'email': 'ada@example.com'},
+        {'email': 'grace@example.com'},
+      ]).compile();
+      expect(
+        q.sql,
+        'INSERT INTO "users" ("email") VALUES (?), (?) '
+        'ON CONFLICT DO NOTHING',
+      );
+    });
+
     test('an expression value writes a reference, not a bound value', () {
       final q = forge(driver())
           .insertInto(users)
@@ -314,6 +338,43 @@ void main() {
         'UPDATE "users" SET "name" = ?, "is_active" = ? WHERE "id" = ?',
       );
       expect(q.args, ['Ada', 0, 42]);
+    });
+
+    test('a where before values keeps the filter', () {
+      final q = forge(driver())
+          .update(users)
+          .where(users.id.eq(42))
+          .values({'name': 'Ada', 'is_active': false})
+          .compile();
+      expect(
+        q.sql,
+        'UPDATE "users" SET "name" = ?, "is_active" = ? WHERE "id" = ?',
+      );
+      expect(q.args, ['Ada', 0, 42]);
+    });
+
+    test('a where before values keeps an IS NULL filter', () {
+      final q = forge(driver())
+          .update(users)
+          .where(users.email.isNull)
+          .values({'name': 'Ada'})
+          .compile();
+      expect(q.sql, 'UPDATE "users" SET "name" = ? WHERE "email" IS NULL');
+      expect(q.args, ['Ada']);
+    });
+
+    test('where keeps a preceding returning', () {
+      final q = forge(driver())
+          .update(users)
+          .values({'name': 'Ada'})
+          .returning()
+          .where(users.id.eq(1))
+          .compile();
+      expect(
+        q.sql,
+        'UPDATE "users" SET "name" = ? WHERE "id" = ? RETURNING *',
+      );
+      expect(q.args, ['Ada', 1]);
     });
 
     test('execute returns the affected row count', () async {
@@ -477,6 +538,16 @@ void main() {
           .returning()
           .compile();
       expect(q.sql, 'DELETE FROM "users" WHERE "id" = ? RETURNING *');
+    });
+
+    test('where keeps a preceding returning', () {
+      final q = forge(driver())
+          .deleteFrom(users)
+          .returning()
+          .where(users.id.eq(1))
+          .compile();
+      expect(q.sql, 'DELETE FROM "users" WHERE "id" = ? RETURNING *');
+      expect(q.args, [1]);
     });
 
     test('a returning delete cannot be run as a row count', () {
