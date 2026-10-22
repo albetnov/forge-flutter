@@ -2,7 +2,7 @@ name: fetch_forge
 description: >-
   Cached, retryable, reactive queries and mutations on top of the signals
   package. Fetch remote data without leaving the signals mental model.
-version: 0.2.1
+version: 0.3.0
 repository: https://github.com/albetnov/forge-flutter/tree/main/packages/fetch_forge
 homepage: https://github.com/albetnov/forge-flutter
 issue_tracker: https://github.com/albetnov/forge-flutter/issues

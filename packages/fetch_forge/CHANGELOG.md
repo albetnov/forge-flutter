@@ -1,3 +1,23 @@
+## 0.3.0
+
+- **Breaking:** `QueryBuilder` now hands its builder a `QueryView<T, V>`
+  instead of an `AsyncValue<T>` snapshot — the read-side mirror of
+  `MutationView`. The view carries the state of the read (`snapshot`,
+  `status`, `data`, `error`, `stackTrace`, `isFetching`, `isLoading`,
+  `isSuccess`, `isError`, `isStale`) and the calls that drive it (`watch`,
+  `refetch`, `setData`, `invalidate`, `invalidateAll`), and it hides
+  `dispose` and `bind` so the widget-owned query cannot be killed or
+  double-bound from outside.
+- **Breaking:** the builder callback signature changed from
+  `Widget Function(BuildContext, AsyncValue<T>)` to
+  `Widget Function(BuildContext, QueryView<T, V>)`. Migration is mechanical:
+  `builder: (context, snapshot) => switch (snapshot) { ... }` becomes
+  `builder: (context, query) => switch (query.snapshot.value) { ... }`.
+- New `autoFetch` prop on `QueryBuilder` (default `true`): with `false` the
+  variables signal is not bound, so the read stays `AsyncValueIdle` until
+  something asks for it — `query.refetch(...)` from a button, or a
+  `refresh` bump. A variables change alone never fetches in that mode.
+
 ## 0.2.1
 
 - Internal only: the Flutter layer moved out of `lib/flutter.dart` into one

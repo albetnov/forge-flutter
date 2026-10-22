@@ -1,11 +1,14 @@
 # fetch_forge — remaining work
 
-Shipped: `0.2.1` — `Query`, `Mutation`, `AsyncValue`, `QueryClient`,
-`RetryPolicy`, `QueryBuilder`, `MutationBuilder`, `QueryScope`, CLI + Flutter
-examples.
+Shipped: `0.3.0` — `Query`, `Mutation`, `AsyncValue`, `QueryClient`,
+`RetryPolicy`, `QueryBuilder`, `QueryView`, `MutationBuilder`,
+`MutationView`, `QueryScope`, CLI + Flutter examples.
 The Flutter layer lives in `lib/src/flutter/` (one file per widget) and
 `lib/flutter.dart` is the barrel that re-exports it.
-176 tests green via `flutter test`. Everything else in the original brief
+Both builders hand their builder a view — `QueryView` for reads,
+`MutationView` for writes — so a widget never owns a query or a mutation by
+hand, and the read side can fetch on demand with `autoFetch: false`.
+179 tests green via `flutter test`. Everything else in the original brief
 is built (including the decided deviations: no `Mutation.snapshot`, bare
 `dart test` superseded by `flutter test`, `invalidateCache` instead of the
 version-signal recipe, minimal android+web example shells); this file keeps
