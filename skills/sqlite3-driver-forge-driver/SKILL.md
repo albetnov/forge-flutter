@@ -1,6 +1,6 @@
 ---
 name: sqlite3-driver-forge-driver
-description: SqliteDriver lifecycle, config, query/execute/insert, transactions, backup/restore, error types.
+description: SqliteDriver lifecycle, config, query/execute/insert, transactions, tracing, backup/restore, error types.
 ---
 
 # `SqliteDriver`: connect → use → disconnect
@@ -28,7 +28,24 @@ try {
 
 ## Configuration
 
-`SqliteDriver.file(path, {readOnly, foreignKeys: true, journalMode: 'WAL', synchronous, busyTimeoutMs: 5000, cipherMigrate: false, vfs, uri, cipher})` or `SqliteDriver.inMemory({...})`. Full form: `SqliteDriver(config: SqliteDriverConfig(...))`. `connect({cipher})` overrides `config.cipher` for that connect only. `journalMode`/`synchronous` are skipped when read-only or in-memory. Only `null, bool, int, double, String, Uint8List` args cross the isolate — anything else throws `ArgumentError` before SQLite.
+`SqliteDriver.file(path, {readOnly, foreignKeys: true, journalMode: 'WAL', synchronous, busyTimeoutMs: 5000, cipherMigrate: false, vfs, uri, cipher, onTrace})` or `SqliteDriver.inMemory({...})`. Full form: `SqliteDriver(config: SqliteDriverConfig(...))`. `connect({cipher})` overrides `config.cipher` for that connect only. `journalMode`/`synchronous` are skipped when read-only or in-memory. Only `null, bool, int, double, String, Uint8List` args cross the isolate — anything else throws `ArgumentError` before SQLite.
+
+## Tracing
+
+`onTrace` receives one `SqlTrace` per statement that reaches the database, after it settles — including failures. `ConsoleSqlTrace` prints it:
+
+```dart
+final driver = SqliteDriver.file('/data/app.db', onTrace: const ConsoleSqlTrace());
+```
+
+```text
+[sql] SELECT * FROM users WHERE age > ? args: [30]
+      → 2 rows returned in 3.1ms
+      {id: 1, name: 'ada', age: 36}, {id: 2, name: 'grace', age: 45}
+```
+
+The trace carries the SQL, the bound parameters, the rows returned, the rows affected, the last insert id, the duration and the error. The printed result is trimmed (500 chars of SQL, 40 per value, first 3 rows) — the reported count is the true one. The encryption password never appears: the key travels in the connect handshake and `PRAGMA key` runs inside the worker. A sink that throws never breaks the statement. Write your own sink for a counter, a file or a test double; `formatSqlTrace` renders a trace the same way for other drivers.
+
 
 ## Instance management
 

@@ -9,6 +9,7 @@ import 'package:sqlite_schema_forge/sqlite_schema_forge.dart';
 import 'config.dart';
 import 'exceptions.dart';
 import 'secure_password.dart';
+import 'trace.dart';
 import 'worker.dart';
 
 /// Zone token marking "inside a transaction owned by this driver".
@@ -71,6 +72,7 @@ final class SqliteDriver implements ForgeExecutor, DatabaseExecutor {
     String? vfs,
     bool uri = false,
     SecurePassword? cipher,
+    SqlTraceSink? onTrace,
   }) => SqliteDriver(
     config: SqliteDriverConfig(
       path: path,
@@ -83,6 +85,7 @@ final class SqliteDriver implements ForgeExecutor, DatabaseExecutor {
       vfs: vfs,
       uri: uri,
       cipher: cipher,
+      onTrace: onTrace,
     ),
   );
 
@@ -94,11 +97,13 @@ final class SqliteDriver implements ForgeExecutor, DatabaseExecutor {
     bool foreignKeys = true,
     int busyTimeoutMs = 5000,
     SecurePassword? cipher,
+    SqlTraceSink? onTrace,
   }) => SqliteDriver(
     config: SqliteDriverConfig.inMemory(
       foreignKeys: foreignKeys,
       busyTimeoutMs: busyTimeoutMs,
       cipher: cipher,
+      onTrace: onTrace,
     ),
   );
 
@@ -261,11 +266,38 @@ final class SqliteDriver implements ForgeExecutor, DatabaseExecutor {
     List<Object?>? args,
   ]) async {
     _checkArgs(args);
-    final response = await _guarded(
-      () => _roundTrip(WorkerOp.query, sql: sql, args: args),
-    );
-    final rows = response['rows'] as List<Object?>? ?? const [];
-    return [for (final row in rows) (row as Map).cast<String, Object?>()];
+    final stopwatch = Stopwatch()..start();
+    try {
+      final response = await _guarded(
+        () => _roundTrip(WorkerOp.query, sql: sql, args: args),
+      );
+      final rows = response['rows'] as List<Object?>? ?? const [];
+      final result = [
+        for (final row in rows) (row as Map).cast<String, Object?>(),
+      ];
+      _trace(
+        SqlTrace(
+          sql: sql,
+          args: args ?? const <Object?>[],
+          kind: SqlTraceKind.select,
+          rows: result,
+          duration: stopwatch.elapsed,
+        ),
+      );
+      return result;
+    } catch (error, stackTrace) {
+      _trace(
+        SqlTrace(
+          sql: sql,
+          args: args ?? const <Object?>[],
+          kind: SqlTraceKind.select,
+          duration: stopwatch.elapsed,
+          error: error,
+          stackTrace: stackTrace,
+        ),
+      );
+      rethrow;
+    }
   }
 
   @override
@@ -281,19 +313,70 @@ final class SqliteDriver implements ForgeExecutor, DatabaseExecutor {
   @override
   Future<int> execute(String sql, [List<Object?>? args]) async {
     _checkArgs(args);
-    final response = await _guarded(
-      () => _roundTrip(WorkerOp.execute, sql: sql, args: args),
-    );
-    return response['changes'] as int? ?? 0;
+    final stopwatch = Stopwatch()..start();
+    try {
+      final response = await _guarded(
+        () => _roundTrip(WorkerOp.execute, sql: sql, args: args),
+      );
+      final changes = response['changes'] as int? ?? 0;
+      _trace(
+        SqlTrace(
+          sql: sql,
+          args: args ?? const <Object?>[],
+          kind: SqlTraceKind.execute,
+          affectedRows: changes,
+          duration: stopwatch.elapsed,
+        ),
+      );
+      return changes;
+    } catch (error, stackTrace) {
+      _trace(
+        SqlTrace(
+          sql: sql,
+          args: args ?? const <Object?>[],
+          kind: SqlTraceKind.execute,
+          duration: stopwatch.elapsed,
+          error: error,
+          stackTrace: stackTrace,
+        ),
+      );
+      rethrow;
+    }
   }
 
   @override
   Future<int> insert(String sql, [List<Object?>? args]) async {
     _checkArgs(args);
-    final response = await _guarded(
-      () => _roundTrip(WorkerOp.insert, sql: sql, args: args),
-    );
-    return response['lastId'] as int? ?? 0;
+    final stopwatch = Stopwatch()..start();
+    try {
+      final response = await _guarded(
+        () => _roundTrip(WorkerOp.insert, sql: sql, args: args),
+      );
+      final lastId = response['lastId'] as int? ?? 0;
+      _trace(
+        SqlTrace(
+          sql: sql,
+          args: args ?? const <Object?>[],
+          kind: SqlTraceKind.insert,
+          affectedRows: response['changes'] as int? ?? 0,
+          lastInsertId: lastId,
+          duration: stopwatch.elapsed,
+        ),
+      );
+      return lastId;
+    } catch (error, stackTrace) {
+      _trace(
+        SqlTrace(
+          sql: sql,
+          args: args ?? const <Object?>[],
+          kind: SqlTraceKind.insert,
+          duration: stopwatch.elapsed,
+          error: error,
+          stackTrace: stackTrace,
+        ),
+      );
+      rethrow;
+    }
   }
 
   /// Runs [action] in a transaction, rolling back if it throws.
@@ -475,6 +558,20 @@ final class SqliteDriver implements ForgeExecutor, DatabaseExecutor {
       'args' => ArgumentError(message),
       _ => SqliteDriverException(message, resultCode: resultCode),
     };
+  }
+
+  /// Hands [trace] to the configured sink, if there is one.
+  ///
+  /// A sink that throws must not break the statement it describes, so the
+  /// failure is swallowed: tracing is a diagnostic, never a dependency.
+  void _trace(SqlTrace trace) {
+    final SqlTraceSink? sink = config.onTrace;
+    if (sink == null) return;
+    try {
+      sink(trace);
+    } catch (_) {
+      // A broken sink must not take the database down with it.
+    }
   }
 
   static void _checkArgs(List<Object?>? args) {

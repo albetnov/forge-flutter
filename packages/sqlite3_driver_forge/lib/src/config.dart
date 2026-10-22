@@ -1,4 +1,5 @@
 import 'secure_password.dart';
+import 'trace.dart';
 
 /// Static configuration for a [SqliteDriver] connection.
 ///
@@ -64,6 +65,18 @@ final class SqliteDriverConfig {
   /// passing the password per-`connect()` call and disposing it afterwards.
   final SecurePassword? cipher;
 
+  /// Receives one trace per statement that reaches the database.
+  ///
+  /// `null` (the default) traces nothing. Pass [ConsoleSqlTrace] to print
+  /// the executed SQL, the parameters, the rows returned and the rows
+  /// affected to the debug console.
+  ///
+  /// The sink is called on the isolate that issued the statement, after it
+  /// settles. It never sees the encryption password: the key travels to the
+  /// worker in the connect handshake and `PRAGMA key` runs inside the worker,
+  /// never through a traced statement.
+  final SqlTraceSink? onTrace;
+
   /// Creates a config for a file at [path], or an in-memory database when
   /// [path] is `null`.
   ///
@@ -80,6 +93,7 @@ final class SqliteDriverConfig {
     this.vfs,
     this.uri = false,
     this.cipher,
+    this.onTrace,
   });
 
   /// Private in-memory database living in the background isolate.
@@ -88,6 +102,7 @@ final class SqliteDriverConfig {
     this.busyTimeoutMs = 5000,
     this.cipherMigrate = false,
     this.cipher,
+    this.onTrace,
   }) : path = null,
        readOnly = false,
        journalMode = null,

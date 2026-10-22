@@ -9,3 +9,4 @@ export 'src/config.dart';
 export 'src/driver.dart';
 export 'src/exceptions.dart';
 export 'src/secure_password.dart';
+export 'src/trace.dart';

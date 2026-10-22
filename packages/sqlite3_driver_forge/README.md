@@ -45,6 +45,109 @@ final forge = Forge(driver); // ForgeExecutor
   `restoreFrom(path)` cold file copy while disconnected.
 - **SQLCipher**: `connect(cipher: ...)` / `changePassword(...)` with
   `SqlCipherAuthException` on a wrong key.
+- **Tracing**: `onTrace:` receives every statement that reaches the database,
+  with the SQL, the parameters, the rows returned, the rows affected and the
+  duration. `ConsoleSqlTrace` prints it to the debug console.
+
+## Tracing
+
+Pass `onTrace` to see what your app actually asks the database. The sink is
+called once per statement, after it settles — including when it fails:
+
+```dart
+final driver = SqliteDriver.file(
+  '/data/app.db',
+  onTrace: const ConsoleSqlTrace(),
+);
+```
+
+```text
+[sql] SELECT * FROM users WHERE age > ? args: [30]
+      → 2 rows returned in 3.1ms
+      {id: 1, name: 'ada', age: 36}, {id: 2, name: 'grace', age: 45}
+[sql] INSERT INTO users (name, age) VALUES (?, ?) args: ['ada', 36]
+      → 1 row affected, last id 1 in 4.6ms
+[sql] UPDATE users SET age = ? WHERE id = ? args: [37, 1]
+      → 1 row affected in 152µs
+[sql] SELECT * FROM nope
+      → FAILED in 1.6ms: SqliteDriverException (1): ... no such table: nope
+```
+
+What the output shows:
+
+| Line | Meaning |
+| --- | --- |
+| `[sql] …` | The statement as executed, with the bound parameters. |
+| `→ N rows returned` | How many rows the statement returned. |
+| `→ N row(s) affected` | How many rows it changed. |
+| `→ … last id N` | The row id of an insert. |
+| `→ FAILED in …` | The failure, with the statement that caused it. |
+| `→ … in 2.1ms` | How long it took, including the round trip to the worker isolate. |
+
+The last line shows the first few rows, trimmed for reading: the SQL is cut
+at 500 characters, a parameter or a cell at 40, and only the first 3 rows are
+shown — the reported count is always the true one. `ConsoleSqlTrace(maxRows:,
+maxValueLength:, maxSqlLength:)` changes the limits.
+
+Two things worth knowing:
+
+- **The trace never carries the encryption password.** The key travels to the
+  worker in the connect handshake and `PRAGMA key` runs inside the worker, so
+  it never passes through a traced statement.
+- **Traces hold the full result set.** A sink that stores them decides what
+  to keep; `ConsoleSqlTrace` trims only when printing.
+
+Write your own sink for anything else — a counter, a file, a test double:
+
+```dart
+void onTrace(SqlTrace trace) {
+  if (trace.failed) errors.add(trace);
+}
+```
+
+### Tracing another driver
+
+`sqlite_query_forge` ships no driver, so if you use `sqflite`, `drift` or
+your own binding, the trace recipe is short: wrap the executor, time the
+call, and hand the same fields to `formatSqlTrace` from this package (or
+render them yourself — the format is four lines).
+
+```dart
+class TracingExecutor implements ForgeExecutor {
+  TracingExecutor(this._inner);
+
+  final ForgeExecutor _inner;
+  final List<SqlTrace> traces = [];
+
+  @override
+  Future<List<Map<String, Object?>>> query(String sql, [List<Object?>? args]) async {
+    final stopwatch = Stopwatch()..start();
+    try {
+      final rows = await _inner.query(sql, args);
+      traces.add(SqlTrace(
+        sql: sql,
+        args: args ?? const [],
+        kind: SqlTraceKind.select,
+        rows: rows,
+        duration: stopwatch.elapsed,
+      ));
+      return rows;
+    } catch (error, stackTrace) {
+      traces.add(SqlTrace(
+        sql: sql,
+        args: args ?? const [],
+        kind: SqlTraceKind.select,
+        duration: stopwatch.elapsed,
+        error: error,
+        stackTrace: stackTrace,
+      ));
+      rethrow;
+    }
+  }
+
+  // execute, insert and transaction follow the same shape.
+}
+```
 
 ## Encrypted databases
 
