@@ -1,8 +1,10 @@
 # fetch_forge — remaining work
 
-Shipped: `0.2.0` — `Query`, `Mutation`, `AsyncValue`, `QueryClient`,
+Shipped: `0.2.1` — `Query`, `Mutation`, `AsyncValue`, `QueryClient`,
 `RetryPolicy`, `QueryBuilder`, `MutationBuilder`, `QueryScope`, CLI + Flutter
 examples.
+The Flutter layer lives in `lib/src/flutter/` (one file per widget) and
+`lib/flutter.dart` is the barrel that re-exports it.
 176 tests green via `flutter test`. Everything else in the original brief
 is built (including the decided deviations: no `Mutation.snapshot`, bare
 `dart test` superseded by `flutter test`, `invalidateCache` instead of the
