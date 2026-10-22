@@ -3,7 +3,7 @@ description: >-
   Background-isolate SQLite driver over package:sqlite3 with serialized access
   and SQLCipher support. Runs sqlite_query_forge and sqlite_schema_forge
   statements.
-version: 0.1.3
+version: 0.2.0
 repository: https://github.com/albetnov/forge-flutter/tree/main/packages/sqlite3_driver_forge
 homepage: https://github.com/albetnov/forge-flutter
 issue_tracker: https://github.com/albetnov/forge-flutter/issues
