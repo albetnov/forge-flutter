@@ -34,11 +34,14 @@ then verify, from the repo root:
 ```sh
 cd docs && bun run build
 (cd packages/<package> && dart pub publish --dry-run)
-python3 tool/release_status.py
+python3 tool/release_status.py --lint
 ```
 
-`tool/release_status.py` compares the local pubspec, pub.dev and the git
-tags. it does not read the docs — that check is on you.
+`tool/release_status.py --lint` is the check that enforces most of this
+list: it compares the pubspecs against the docs index, the guide pages, the
+READMEs, the skills and the changelogs, and exits 1 when something is out
+of date. it needs no network. the release status itself (pub.dev, tags) is
+the same script without `--lint`.
 
 ## Documentation
 
