@@ -260,8 +260,8 @@ void main() {
           variables: signal(1),
           client: client,
           staleTime: const Duration(minutes: 5),
-          builder: (BuildContext context, AsyncValue<String> snapshot) =>
-              Text(switch (snapshot) {
+          builder: (BuildContext context, QueryView<String, int> query) =>
+              Text(switch (query.snapshot.value) {
                 AsyncValueData(:final value) => value,
                 AsyncValueLoading() => 'loading',
                 AsyncValueError(:final error) => 'error: $error',
@@ -300,8 +300,8 @@ void main() {
               fetcher: fetcher,
               variables: signal(1),
               client: client,
-              builder: (BuildContext context, AsyncValue<String> snapshot) =>
-                  Text(switch (snapshot) {
+              builder: (BuildContext context, QueryView<String, int> query) =>
+                  Text(switch (query.snapshot.value) {
                     AsyncValueData(:final value) => value,
                     AsyncValueLoading() => 'loading',
                     AsyncValueError(:final error) => 'error: $error',

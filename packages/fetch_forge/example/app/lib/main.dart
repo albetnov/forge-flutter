@@ -125,8 +125,8 @@ class _UsersPageState extends State<UsersPage> {
               refresh: refresh,
               staleTime: const Duration(seconds: 30),
               builder:
-                  (BuildContext context, AsyncValue<List<String>> snapshot) =>
-                      switch (snapshot) {
+                  (BuildContext context, QueryView<List<String>, int> query) =>
+                      switch (query.snapshot.value) {
                         AsyncValueData(:final value) => ListView(
                           children: <Widget>[
                             for (final String user in value)

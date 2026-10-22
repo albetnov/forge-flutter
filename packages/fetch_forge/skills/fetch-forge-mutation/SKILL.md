@@ -73,7 +73,10 @@ connect, mutation and query must share the `client` **and** the same
 mutation, hands its builder a `MutationView<T, V>` (the signals plus
 `mutate`, `mutateAsync`, `reset`, `invalidateCache`) and disposes
 everything on unmount. A `trigger` signal starts the write declaratively,
-with the current `variables`. See the `fetch-forge-flutter-widgets` skill.
+with the current `variables`. The read side is the mirror image:
+`QueryBuilder` hands its builder a `QueryView<T, V>` (the state plus
+`watch`, `refetch`, `setData`, `invalidate`), and `autoFetch: false` turns
+the mount fetch off. See the `fetch-forge-flutter-widgets` skill.
 
 ```dart
 MutationBuilder<int, String>(

@@ -92,13 +92,30 @@ QueryScope(
     fetcher: fetchUsers,
     variables: page,
     staleTime: const Duration(seconds: 30),
-    builder: (context, snapshot) => switch (snapshot) {
+    builder: (context, query) => switch (query.snapshot.value) {
       AsyncValueData(:final value) => Text(value.join(', ')),
       AsyncValueLoading() => const Text('Loading...'),
       AsyncValueError(:final error) => Text('Failed: $error'),
       AsyncValueIdle() => const Text('Idle'),
     },
   ),
+);`;
+const fqManual = `final load = signal(0);
+
+QueryBuilder<List<String>, int>(
+  fetcher: fetchUsers,
+  variables: page,
+  autoFetch: false,   // no fetch on mount, no fetch on a variables change
+  refresh: load,      // each bump fetches with the current variables
+  builder: (context, query) => switch (query.snapshot.value) {
+    AsyncValueIdle() => FilledButton(
+      onPressed: () => load.value++,
+      child: const Text('Load users'),
+    ),
+    AsyncValueLoading() => const Text('Loading...'),
+    AsyncValueData(:final value) => Text(value.join(', ')),
+    AsyncValueError(:final error) => Text('Failed: $error'),
+  },
 );`;
 const fqMutation = `MutationBuilder<int, String>(
   mutator: createUser,
@@ -521,7 +538,7 @@ const skillsCmd = `dart run skills@ get`;
         <section class="block" id="flutter" aria-labelledby="flutter-h">
           <h2 id="flutter-h">In Flutter widgets</h2>
           <p>
-            The Flutter entrypoint (<code class="inline">package:fetch_forge/flutter.dart</code>) re-exports everything above and adds three widgets. <code class="inline">QueryBuilder</code> owns a query, binds it to a variables signal, and rebuilds from its snapshot; <code class="inline">QueryScope</code> shares one client with a subtree, so two builders watching the same variables share one fetch and settle together; <code class="inline">MutationBuilder</code> owns a mutation and rebuilds from its signals.
+            The Flutter entrypoint (<code class="inline">package:fetch_forge/flutter.dart</code>) re-exports everything above and adds three widgets. <code class="inline">QueryBuilder</code> owns a query, binds it to a variables signal, and rebuilds from the <code class="inline">QueryView</code> it hands to its builder; <code class="inline">QueryScope</code> shares one client with a subtree, so two builders watching the same variables share one fetch and settle together; <code class="inline">MutationBuilder</code> owns a mutation and rebuilds from its <code class="inline">MutationView</code>.
           </p>
           <figure class="code">
             <figcaption><span>builder and scope</span><button class="copy" data-copy="code-fq">Copy</button></figcaption>
@@ -530,6 +547,14 @@ const skillsCmd = `dart run skills@ get`;
           <p>
             A <code class="inline">refresh</code> signal forces a refetch of the current variables when bumped. When the widget's arguments change, the old query no longer describes the request, so the state disposes it and builds a new one; unmount disposes bindings and query together. Keep <code class="inline">fetcher</code> referentially stable (a top-level function or tear-off, not an inline closure): a new fetcher identity recreates the query with no data, so a parent rebuilding per keystroke flashes the subtree back to loading. Only <code class="inline">builder</code> may be inline. The layer stays thin: nothing here you could not write with <code class="inline">Query</code>, <code class="inline">bind</code>, and <code class="inline">SignalBuilder</code> in about twenty lines, and the core never imports Flutter.
           </p>
+          <h3>Fetching on demand</h3>
+          <p>
+            The view is a handle, not just a snapshot: it carries the state of the read and the calls that drive it — <code class="inline">watch</code>, <code class="inline">refetch</code>, <code class="inline">setData</code>, <code class="inline">invalidate</code> — so a button can ask for fresh data without a widget owning the query by hand. Set <code class="inline">autoFetch</code> to <code class="inline">false</code> and the variables signal is not bound at all: nothing fetches on mount, and nothing fetches on a variables change either. The read stays idle until an explicit call asks for it.
+          </p>
+          <figure class="code">
+            <figcaption><span>tap to fetch</span><button class="copy" data-copy="code-fqa">Copy</button></figcaption>
+            <pre><code id="code-fqa" set:html={highlight(fqManual)} /></pre>
+          </figure>
           <h3>Writing from a widget</h3>
           <p>
             Writes have the same shape. <code class="inline">MutationBuilder</code> owns the mutation, hands its builder a <code class="inline">MutationView</code> — the mutation's signals plus the calls that start a write — and disposes everything on unmount, so no widget owns a mutation by hand.
@@ -612,7 +637,7 @@ const skillsCmd = `dart run skills@ get`;
               <tr><th scope="row">fetch-forge-mutation</th><td>One-shot writes: mutate vs mutateAsync, reset, cache invalidation, disposal.</td></tr>
               <tr><th scope="row">fetch-forge-cache-keys</th><td>Variables are the cache key: equality rules, CacheKeyError, the cacheKey mapper.</td></tr>
               <tr><th scope="row">fetch-forge-client-retry</th><td>Supporting types: QueryClient cache, CacheEntry expiry, RetryPolicy, AsyncValue.</td></tr>
-              <tr><th scope="row">fetch-forge-flutter-widgets</th><td>The Flutter layer: QueryBuilder, MutationBuilder, QueryScope, the refresh and trigger signals, disposal, testing.</td></tr>
+              <tr><th scope="row">fetch-forge-flutter-widgets</th><td>The Flutter layer: QueryBuilder, MutationBuilder, QueryView, MutationView, QueryScope, autoFetch, the refresh and trigger signals, disposal, testing.</td></tr>
             </tbody>
           </table>
           <div class="note">

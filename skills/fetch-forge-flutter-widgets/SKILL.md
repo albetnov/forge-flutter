@@ -1,6 +1,6 @@
 ---
 name: fetch-forge-flutter-widgets
-description: Flutter layer. QueryBuilder and MutationBuilder props and lifecycle, QueryScope sharing, refresh and trigger signals, disposal, thin-layer rule and testing.
+description: Flutter layer. QueryBuilder and MutationBuilder props and lifecycle, QueryView and MutationView handles, QueryScope sharing, autoFetch, refresh and trigger signals, disposal, thin-layer rule and testing.
 ---
 
 # Flutter layer
@@ -12,7 +12,13 @@ listeners) to it.
 
 ## `QueryBuilder<T, V>`
 
-Owns a `Query`, binds it to a variables signal, rebuilds from its snapshot.
+Owns a `Query`, binds it to a variables signal, rebuilds from its state. The
+builder callback gets a `QueryView<T, V>`, not the snapshot: the view carries
+the state (`snapshot`, `status`, `data`, `error`, `stackTrace`, `isFetching`,
+`isLoading`, `isSuccess`, `isError`, `isStale`) and the calls (`watch`,
+`refetch`, `setData`, `invalidate`, `invalidateAll`), and hides `dispose` and
+`bind` so the widget-owned query cannot be killed or double-bound from
+outside.
 
 ```dart
 QueryScope(
@@ -21,7 +27,7 @@ QueryScope(
     fetcher: fetchUsers,
     variables: page,           // ReadonlySignal<int>: new value refetches
     staleTime: const Duration(seconds: 30),
-    builder: (context, snapshot) => switch (snapshot) {
+    builder: (context, query) => switch (query.snapshot.value) {
       AsyncValueData(:final value) => Text(value.join(', ')),
       AsyncValueLoading() => const Text('Loading...'),
       AsyncValueError(:final error) => Text('Failed: $error'),
@@ -33,17 +39,23 @@ QueryScope(
 
 | Prop | Meaning |
 | --- | --- |
-| `fetcher`, `variables`, `builder` (required) | Async fn, variables signal, `Widget Function(BuildContext, AsyncValue<T>)`. |
+| `fetcher`, `variables`, `builder` (required) | Async fn, variables signal, `Widget Function(BuildContext, QueryView<T, V>)`. |
 | `client` | Shared cache. Default: nearest `QueryScope`. Neither: private client owned by the query. |
 | `retry`, `staleTime`, `cacheTime`, `cacheKey`, `enabled` | Passed straight to the owned query. |
 | `refresh` (`ReadonlySignal<Object?>?`) | Any bump refetches the **current** variables — even while `enabled` is `false` (explicit-`refetch` semantics). Only the bump matters, not the value. |
+| `autoFetch` (default `true`) | `false` means the variables signal is **not** bound: nothing fetches on mount or on a variables change. Fetch only when asked (`query.refetch(...)` or a `refresh` bump). |
 
 Lifecycle: created + bound in `didChangeDependencies` (scope must be
-readable); any argument change except `builder` disposes the old query and
-builds a new one in `didUpdateWidget`; unmount stops the refresh effect
-and disposes the query (bindings go with it). Rebuilds go through
-`SignalBuilder` with the **named** `builder` parameter (signals v7 API);
-`Watch` is deprecated — do not use it in new code.
+readable); any argument change except `builder` and `autoFetch` disposes the
+old query and builds a new one in `didUpdateWidget`; changing `autoFetch`
+keeps the query and only rewires the binding, so the data survives; unmount
+stops the refresh effect and disposes the query (bindings go with it).
+Rebuilds go through `SignalBuilder` with the **named** `builder` parameter
+and `dependencies` on the snapshot (signals v7 API); `Watch` is deprecated —
+do not use it in new code.
+
+Tap-to-fetch is `autoFetch: false` plus a `refresh` signal (or a
+`query.refetch(...)` in a button). Do not build a second widget for it.
 
 ## `QueryScope`
 
@@ -108,6 +120,8 @@ and disposes the mutation. Rebuilds go through `SignalBuilder` with the
   call and both settle — that is the canonical scope test.
 - The refresh effect skips its first run (binding already fetched) and
   reads variables via `peek`, subscribing to nothing but the refresh.
+- With `autoFetch: false` the first run of the refresh effect is the only
+  skipped one: the first bump fetches.
 - Keep-last-data works through the builder: refetch renders
   `AsyncValueLoading(previous:)` — show stale rows plus a refresh marker,
   not a full spinner.

@@ -2,9 +2,9 @@
 ///
 /// This entrypoint re-exports the core and adds three widgets: [QueryScope],
 /// which shares one [QueryClient] with a subtree, [QueryBuilder], which owns a
-/// [Query], binds it to a variables signal and rebuilds from its
-/// [Query.snapshot] through signals, and [MutationBuilder], which owns a
-/// [Mutation] and rebuilds from its signals.
+/// [Query], binds it to a variables signal and rebuilds from the [QueryView]
+/// it hands to its builder, and [MutationBuilder], which owns a [Mutation] and
+/// rebuilds from the [MutationView] it hands to its builder.
 ///
 /// The layer is optional sugar. Everything here can be written with the core
 /// in about twenty lines: a [Query], a `bind` for the variables signal and a

@@ -74,7 +74,8 @@ dependencies:
 | `QueryClient` | An optional shared cache keyed by query variables, expired on read rather than by a timer, that deduplicates concurrent work per key. |
 | `RetryPolicy` | How a failed call is retried: an attempt cap, a backoff, an optional predicate, and `run` to execute the loop. |
 | `CacheEntry<T>` | One cached result: the value, the moment it was written, and an optional expiry set by the writer. |
-| `QueryBuilder<T, V>` | A widget that owns a `Query`, binds it to a variables signal and builds from its snapshot; a `refresh` signal forces a refetch. |
+| `QueryBuilder<T, V>` | A widget that owns a `Query`, binds it to a variables signal and builds from its snapshot; an `autoFetch: false` turns the mount fetch off, and a `refresh` signal forces a refetch. |
+| `QueryView<T, V>` | The read-only view a `QueryBuilder` hands to its builder: the state of the read and the calls that drive it (`watch`, `refetch`, `setData`, `invalidate`). |
 | `MutationBuilder<T, V>` | A widget that owns a `Mutation` and builds from its signals; a `trigger` signal starts the write declaratively. |
 | `MutationView<T, V>` | The read-only view a `MutationBuilder` hands to its builder: the mutation's signals, the calls that start a write, and the calls that tidy up after it. |
 | `QueryScope` | An `InheritedWidget` that shares one `QueryClient` with the builders below it. |
@@ -235,10 +236,10 @@ leaving the cache alone.
 
 The Flutter entrypoint (`package:fetch_forge/flutter.dart`) re-exports
 everything on this page and adds three widgets. `QueryBuilder` owns a `Query`,
-binds it to a variables signal and rebuilds from its snapshot through
-signals; `QueryScope` shares one `QueryClient` with a subtree, so two
-builders watching the same variables share one fetch and settle together;
-`MutationBuilder` owns a `Mutation` and rebuilds from its signals.
+binds it to a variables signal and rebuilds from a `QueryView` over its state;
+`QueryScope` shares one `QueryClient` with a subtree, so two builders watching
+the same variables share one fetch and settle together; `MutationBuilder` owns
+a `Mutation` and rebuilds from a `MutationView` over its state.
 
 ```dart
 final page = signal(1);
@@ -249,7 +250,7 @@ QueryScope(
     fetcher: fetchUsers,
     variables: page,
     staleTime: const Duration(seconds: 30),
-    builder: (context, snapshot) => switch (snapshot) {
+    builder: (context, query) => switch (query.snapshot.value) {
       AsyncValueData(:final value) => Text(value.join(', ')),
       AsyncValueLoading() => const Text('Loading...'),
       AsyncValueError(:final error) => Text('Failed: $error'),
@@ -264,6 +265,59 @@ When the widget's arguments change — a new fetcher, timings, or variables
 signal — the old query no longer describes the request, so the state
 disposes it and builds a new one in `didUpdateWidget`. Unmount disposes the
 bindings and the query together.
+
+### The view is the handle
+
+`QueryBuilder` hands its builder a `QueryView`, the read-side mirror of
+`MutationView`: the state of the read (`snapshot`, `status`, `data`, `error`,
+`isFetching`, `isLoading`, `isSuccess`, `isError`, `isStale`) and the calls
+that drive it (`watch`, `refetch`, `setData`, `invalidate`, `invalidateAll`).
+It hides the query itself, so a widget cannot dispose a query it does not
+own.
+
+```dart
+QueryBuilder<List<String>, int>(
+  fetcher: fetchUsers,
+  variables: page,
+  builder: (context, query) => IconButton(
+    icon: const Icon(Icons.refresh),
+    onPressed: () => query.refetch(page.value).ignore(),
+    child: Text(query.isFetching.value ? 'Loading...' : 'Refresh'),
+  ),
+);
+```
+
+### Fetching on demand
+
+By default the read fetches when it mounts, because the variables signal
+drives it. Set `autoFetch: false` and the builder does not bind the variables
+signal: the read stays `AsyncValueIdle` until something asks for it, either
+imperatively through `refetch` or declaratively through a `refresh` bump. A
+variables change alone never fetches in this mode; the next explicit call
+picks up the current variables.
+
+```dart
+final load = signal(0);
+
+QueryBuilder<List<String>, int>(
+  fetcher: fetchUsers,
+  variables: page,
+  autoFetch: false,
+  refresh: load,
+  builder: (context, query) => switch (query.snapshot.value) {
+    AsyncValueIdle() => FilledButton(
+      onPressed: () => load.value++,
+      child: const Text('Load users'),
+    ),
+    AsyncValueLoading() => const Text('Loading...'),
+    AsyncValueData(:final value) => Text(value.join(', ')),
+    AsyncValueError(:final error) => Text('Failed: $error'),
+  },
+);
+```
+
+Once a key has been fetched, invalidating it refetches it, exactly as in
+automatic mode.
 
 ### Writing from a widget
 
