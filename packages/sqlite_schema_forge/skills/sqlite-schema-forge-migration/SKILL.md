@@ -1,6 +1,6 @@
 ---
 name: sqlite-schema-forge-migration
-description: plan vs applyPlan vs migrate, allowDestructive guard, user_version handling, callbacks, transactions, executor setup.
+description: migration planning and application, hook-backed destructive migration API, legacy allowDestructive guard, user_version handling, callbacks, transactions, executor setup.
 ---
 
 # `SqliteSchemaForge`: plan → apply → migrate
@@ -32,7 +32,9 @@ abstract interface class DatabaseExecutor {
 | --- | --- |
 | `plan(db:, targetSchema:)` | Dry run. Returns `MigrationPlan(fromVersion, toVersion, steps)`; executes nothing except `PRAGMA user_version` + introspection (`table_info`, `index_list`, `sqlite_master`). `user_version == version` short-circuits to empty steps. |
 | `applyPlan(db:, plan:, allowDestructive:)` | Executes `plan.steps` (splits multi-line `step.sql` on `\n`, skips blanks). Never touches `user_version`. For custom multi-store migrators. Throws `StateError` on destructive steps unless `allowDestructive: true`. No-op (`migrated: false`) when `plan.isUpToDate`. |
-| `migrate(db:, targetSchema:, onUpgrade?, onDowngrade?, allowDestructive:)` | Standard path: `plan` + one `transaction` (range callback → `applyPlan` on txn → `PRAGMA user_version = v`). Returns `MigrationResult(migrated, executedSql)` including the version bump. |
+| `migrate(db:, targetSchema:, onUpgrade?, onDowngrade?, allowDestructive:)` | Legacy path: `plan` + transaction. Prefer `migrateWithHooks` for the explicit hook contract. |
+| `migrateWithUpgrades(db:, targetSchema:, upgrades:)` | Opt-in version-bound path. `Upgrade.from(a).to(b, hook)` defines one adjacent transition. Destructive plans require definitions for every crossed transition because the live-to-target diff cannot attribute steps to historical versions. |
+| `applyPlanWithHook(db:, plan:, hook?)` | Opt-in custom-versioning path; a missing hook rejects destructive plans with step descriptions. When supplied, hook and destructive DDL run in one transaction. Safe plans may omit it. |
 | `MigrationPlan` | `isUpToDate` = steps empty; `hasDestructiveChanges` = any `isDestructive`. `PlanStep(type, targetTable, sql, description, isDestructive)`, `ChangeType`: createTable/addColumn/rebuildTable/createIndex/dropIndex/executeCallback. |
 | Callbacks | `onUpgrade` runs when `from < to`, `onDowngrade` when `from > to`, inside the same txn before DDL. |
 
@@ -52,7 +54,7 @@ around the copy-swap itself.
 
 ## Caveats / workarounds
 
-- Destructive guard is fail-closed: `migrate`/`applyPlan` throw unless `allowDestructive: true`. Workaround: `plan()` → assert `!hasDestructiveChanges` in CI, or log `steps.map((s) => s.description)` for review before opting in.
+- Legacy destructive guard is fail-closed: `migrate`/`applyPlan` throw unless `allowDestructive: true`. The opt-in `migrateWithHooks`/`applyPlanWithHook` APIs require an explicit hook for destructive steps; use `MigrationHook.noop()` when no data work is needed.
 - `plan()` diffs shape only (columns present, index names, normalized virtual/trigger SQL) — type/nullable/unique/default changes to an *existing* column produce **no step**. Workaround: handle via `onUpgrade` manual `ALTER`/rebuild, or force a rebuild by removing+re-adding (destructive).
 - Downgrade is shape-diff + `onDowngrade`, not a reversal log — data dropped on upgrade does not come back. Gate downgrades or back up first.
 - `applyPlan` splits `step.sql` on newlines: multi-statement bodies with embedded newlines execute line-by-line — keep trigger bodies to one statement per line or execute them yourself.

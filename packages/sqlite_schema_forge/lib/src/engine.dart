@@ -12,6 +12,76 @@ typedef MigrationCallback = Future<void> Function(
   int toVersion,
 );
 
+/// Explicit acknowledgement hook for migrations, including destructive ones.
+/// Use [MigrationHook.noop] when no data work is needed but the migration has
+/// been reviewed and is intentionally allowed to discard data.
+final class MigrationHook {
+  /// Callback invoked inside the migration transaction.
+  final MigrationCallback _callback;
+
+  /// Whether this hook explicitly acknowledges intentional data loss.
+  final bool acknowledgesDataLoss;
+
+  /// Creates a hook from [callback].
+  const MigrationHook(MigrationCallback callback)
+    : _callback = callback,
+      acknowledgesDataLoss = false;
+
+  /// Creates an explicit hook that performs no data transformation.
+  factory MigrationHook.noop() => MigrationHook._noop();
+
+  MigrationHook._noop()
+    : _callback = _emptyMigrationCallback,
+      acknowledgesDataLoss = true;
+
+  /// Runs this hook for the given version range.
+  Future<void> call(DatabaseExecutor db, int fromVersion, int toVersion) =>
+      _callback(db, fromVersion, toVersion);
+}
+
+Future<void> _emptyMigrationCallback(
+  DatabaseExecutor db,
+  int fromVersion,
+  int toVersion,
+) async {}
+
+/// A migration hook bound to one adjacent schema version transition.
+final class Upgrade {
+  /// Source version for this transition.
+  final int fromVersion;
+
+  const Upgrade._(this.fromVersion);
+
+  /// Starts an upgrade definition from [version].
+  static Upgrade from(int version) => Upgrade._(version);
+
+  /// Completes this transition with its required [hook].
+  UpgradeDefinition to(int version, MigrationHook hook) => UpgradeDefinition(
+    fromVersion: fromVersion,
+    toVersion: version,
+    hook: hook,
+  );
+}
+
+/// One explicitly acknowledged version-to-version upgrade.
+final class UpgradeDefinition {
+  /// Source version.
+  final int fromVersion;
+
+  /// Destination version.
+  final int toVersion;
+
+  /// Hook run for this transition.
+  final MigrationHook hook;
+
+  /// Creates an adjacent version transition.
+  UpgradeDefinition({
+    required this.fromVersion,
+    required this.toVersion,
+    required this.hook,
+  }) : assert((toVersion - fromVersion).abs() == 1);
+}
+
 /// Outcome of a migration: whether anything [migrated] and which SQL ran.
 final class MigrationResult {
   /// Whether any step ran; `false` when the schema was already up to date.
@@ -27,6 +97,196 @@ final class MigrationResult {
 /// Declarative schema migrator: diff a target [Schema] against a live
 /// database, then apply the resulting [MigrationPlan].
 final class SqliteSchemaForge {
+  /// Migrates using hooks explicitly bound to adjacent version transitions.
+  /// If the plan is destructive, definitions must cover every crossed
+  /// transition; each hook runs in order before the schema plan is applied.
+  static Future<MigrationResult> migrateWithUpgrades({
+    required DatabaseExecutor db,
+    required Schema targetSchema,
+    List<UpgradeDefinition> upgrades = const [],
+    bool disableForeignKeys = false,
+  }) async {
+    final migrationPlan = await plan(db: db, targetSchema: targetSchema);
+    if (migrationPlan.isUpToDate) {
+      return const MigrationResult(migrated: false, executedSql: []);
+    }
+    final isUpgrade = migrationPlan.fromVersion < targetSchema.version;
+    final transitions = isUpgrade
+        ? [
+            for (
+              var v = migrationPlan.fromVersion;
+              v < targetSchema.version;
+              v++
+            )
+              (v, v + 1),
+          ]
+        : [
+            for (
+              var v = migrationPlan.fromVersion;
+              v > targetSchema.version;
+              v--
+            )
+              (v, v - 1),
+          ];
+    final byRange = {
+      for (final upgrade in upgrades)
+        (upgrade.fromVersion, upgrade.toVersion): upgrade,
+    };
+    if (migrationPlan.hasDestructiveChanges) {
+      final missing = transitions
+          .where((range) => !byRange.containsKey(range))
+          .toList();
+      if (missing.isNotEmpty) {
+        final details = migrationPlan.steps
+            .where((step) => step.isDestructive)
+            .map((step) => '- ${step.description} (table: ${step.targetTable})')
+            .join('\\n');
+        final ranges = missing
+            .map((range) => '${range.$1}->${range.$2}')
+            .join(', ');
+        throw StateError(
+          'Destructive migration from ${migrationPlan.fromVersion} to '
+          '${targetSchema.version} requires Upgrade definitions for '
+          'each crossed version transition. Missing: $ranges. '
+          'Destructive changes:\\n$details',
+        );
+      }
+    }
+
+    final hooks = [for (final range in transitions) byRange[range]?.hook];
+    final executed = <String>[];
+    Future<void> run() async {
+      await db.transaction((txn) async {
+        for (var i = 0; i < transitions.length; i++) {
+          final hook = hooks[i];
+          if (hook != null) {
+            await hook.call(txn, transitions[i].$1, transitions[i].$2);
+          }
+        }
+        final applied = await applyPlan(
+          db: txn,
+          plan: migrationPlan,
+          allowDestructive: true,
+        );
+        executed.addAll(applied.executedSql);
+        final sql = 'PRAGMA user_version = ${targetSchema.version};';
+        await txn.execute(sql);
+        executed.add(sql);
+      });
+    }
+
+    if (disableForeignKeys) {
+      final wasEnabled = await _wereForeignKeysEnabled(db);
+      await db.execute('PRAGMA foreign_keys = OFF;');
+      executed.add('PRAGMA foreign_keys = OFF;');
+      try {
+        await run();
+      } finally {
+        if (wasEnabled) {
+          await db.execute('PRAGMA foreign_keys = ON;');
+          executed.add('PRAGMA foreign_keys = ON;');
+        }
+      }
+    } else {
+      await run();
+    }
+    return MigrationResult(migrated: true, executedSql: executed);
+  }
+
+  /// Opt-in API requiring an explicit version-direction hook for destructive
+  /// changes. `MigrationHook.noop()` acknowledges intentional data loss.
+  static Future<MigrationResult> migrateWithHooks({
+    required DatabaseExecutor db,
+    required Schema targetSchema,
+    MigrationHook? onUpgrade,
+    MigrationHook? onDowngrade,
+    bool disableForeignKeys = false,
+  }) async {
+    final migrationPlan = await plan(db: db, targetSchema: targetSchema);
+    if (migrationPlan.isUpToDate) {
+      return const MigrationResult(migrated: false, executedSql: []);
+    }
+    final isUpgrade = migrationPlan.fromVersion < targetSchema.version;
+    final hook = isUpgrade ? onUpgrade : onDowngrade;
+    if (migrationPlan.hasDestructiveChanges && hook == null) {
+      final direction = isUpgrade ? 'upgrade' : 'downgrade';
+      final details = migrationPlan.steps
+          .where((step) => step.isDestructive)
+          .map((step) => '- ${step.description} (table: ${step.targetTable})')
+          .join('\n');
+      throw StateError(
+        'Destructive $direction from version ${migrationPlan.fromVersion} '
+        'to ${targetSchema.version} requires an explicit '
+        '${isUpgrade ? 'onUpgrade' : 'onDowngrade'} MigrationHook. '
+        'Use MigrationHook.noop() to acknowledge intentional data loss. '
+        'Destructive changes:\n$details',
+      );
+    }
+    final executedQueries = <String>[];
+    Future<void> runMigration() async {
+      await db.transaction((txn) async {
+        await hook?.call(txn, migrationPlan.fromVersion, targetSchema.version);
+        final applied = await applyPlan(
+          db: txn,
+          plan: migrationPlan,
+          allowDestructive: true,
+        );
+        executedQueries.addAll(applied.executedSql);
+        final setVersionSql = 'PRAGMA user_version = ${targetSchema.version};';
+        await txn.execute(setVersionSql);
+        executedQueries.add(setVersionSql);
+      });
+    }
+
+    if (!disableForeignKeys) {
+      await runMigration();
+    } else {
+      final wasEnabled = await _wereForeignKeysEnabled(db);
+      await db.execute('PRAGMA foreign_keys = OFF;');
+      executedQueries.add('PRAGMA foreign_keys = OFF;');
+      try {
+        await runMigration();
+      } finally {
+        if (wasEnabled) {
+          await db.execute('PRAGMA foreign_keys = ON;');
+          executedQueries.add('PRAGMA foreign_keys = ON;');
+        }
+      }
+    }
+    return MigrationResult(migrated: true, executedSql: executedQueries);
+  }
+
+  /// Applies a plan with an explicit hook when it contains destructive steps.
+  /// The hook receives the plan version range before DDL is applied.
+  static Future<MigrationResult> applyPlanWithHook({
+    required DatabaseExecutor db,
+    required MigrationPlan plan,
+    MigrationHook? hook,
+  }) async {
+    if (plan.steps.isEmpty) {
+      return const MigrationResult(migrated: false, executedSql: []);
+    }
+    if (plan.hasDestructiveChanges) {
+      if (hook == null) {
+        final details = plan.steps
+            .where((step) => step.isDestructive)
+            .map((step) => '- ${step.description} (table: ${step.targetTable})')
+            .join('\n');
+        throw StateError(
+          'Destructive migration from version ${plan.fromVersion} to '
+          '${plan.toVersion} requires an explicit MigrationHook. '
+          'Use MigrationHook.noop() to acknowledge intentional data loss. '
+          'Destructive changes:\n$details',
+        );
+      }
+      return db.transaction((txn) async {
+        await hook.call(txn, plan.fromVersion, plan.toVersion);
+        return applyPlan(db: txn, plan: plan, allowDestructive: true);
+      });
+    }
+    return applyPlan(db: db, plan: plan, allowDestructive: false);
+  }
+
   /// Enables Foreign Keys on SQLite Connection
   static Future<void> enableForeignKeys(DatabaseExecutor db) async {
     await db.execute('PRAGMA foreign_keys = ON;');

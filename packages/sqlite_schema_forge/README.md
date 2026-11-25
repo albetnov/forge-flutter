@@ -55,7 +55,46 @@ void main() async {
 
 SSF eliminates manual `up` and `down` migration files. Instead, the diffing engine calculates structural changes at runtime.
 
-### 1. Data Transformation Callbacks
+### Version-bound upgrade hooks (opt-in)
+
+Use `migrateWithUpgrades` to bind each hook to one adjacent version transition.
+When the overall plan is destructive, every crossed transition must have an
+explicit definition. `noop()` acknowledges that transition without a data
+callback:
+
+```dart
+await SqliteSchemaForge.migrateWithUpgrades(
+  db: db,
+  targetSchema: appSchemaV7,
+  upgrades: [
+    Upgrade.from(5).to(6, MigrationHook((db, from, to) async {
+      // Transform data for this transition.
+    })),
+    Upgrade.from(6).to(7, MigrationHook.noop()),
+  ],
+);
+```
+
+For externally managed versioning, `applyPlanWithHook` applies a reviewed plan
+with one hook for the plan's exact version range:
+
+```dart
+await SqliteSchemaForge.applyPlanWithHook(
+  db: db,
+  plan: plan,
+  hook: MigrationHook.noop(),
+);
+```
+
+The versioned API does not retain schema snapshots, so if any destructive
+change exists in the live-to-target plan it requires definitions for every
+crossed adjacent transition. The rejection lists the missing ranges and the
+destructive steps; `noop()` acknowledges an individual range.
+
+The existing `migrate` and `applyPlan` methods remain available with their
+`allowDestructive` flag for compatibility.
+
+### Legacy API: data transformation callbacks
 
 When structural changes require data transformations (like splitting a column or formatting data before a type change), use `onUpgrade` or `onDowngrade`:
 
@@ -95,7 +134,7 @@ for (final step in plan.steps) {
 
 ```
 
-## Custom Migration Control (`applyPlan`)
+## Legacy custom migration control (`applyPlan`)
 
 If you manage application versioning externally (for example, in a multi-storage setup alongside Hive or DataStore), use `applyPlan`.
 
