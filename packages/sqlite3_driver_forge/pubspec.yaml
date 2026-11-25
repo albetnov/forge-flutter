@@ -16,7 +16,7 @@ resolution: workspace
 dependencies:
   sqlite3: ^3.7.1
   sqlite_query_forge: ^0.4.0
-  sqlite_schema_forge: ^0.1.0
+  sqlite_schema_forge: ^0.2.0
 
 dev_dependencies:
   lints: ^6.0.0

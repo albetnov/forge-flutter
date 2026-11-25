@@ -14,7 +14,7 @@ environment:
 resolution: workspace
 
 dependencies:
-  sqlite_schema_forge: ^0.1.0
+  sqlite_schema_forge: ^0.2.0
 
 dev_dependencies:
   lints: ^6.0.0
