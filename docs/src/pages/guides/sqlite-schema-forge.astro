@@ -44,17 +44,16 @@ const migrateSnippet = `void main() async {
   print('Migrated: \${result.migrated}');
   print('Executed SQL:\\n\${result.executedSql.join('\\n')}');
 }`;
-const upgradeSnippet = `final result = await SqliteSchemaForge.migrate(
+const upgradeSnippet = `final result = await SqliteSchemaForge.migrateWithUpgrades(
   db: db,
-  targetSchema: appSchemaV2,
-  allowDestructive: true, // Required for column removals or type modifications
+  targetSchema: appSchemaV7,
+  upgrades: [
+    Upgrade.from(5).to(6, MigrationHook((db, from, to) async {
+      await db.execute('UPDATE users SET age = 0 WHERE age IS NULL;');
+    })),
+    Upgrade.from(6).to(7, MigrationHook.noop()),
+  ],
   disableForeignKeys: true, // Suspend FK enforcement around rebuilds + data moves
-  onUpgrade: (db, from, to) async {
-    if (from == 1 && to >= 2) {
-      // Phase 1: Transform existing data before structural table rebuild
-      await db.execute("UPDATE users SET age = 0 WHERE age IS NULL;");
-    }
-  },
 );`;
 const planSnippet = `final MigrationPlan plan = await SqliteSchemaForge.plan(
   db: db,
@@ -379,7 +378,7 @@ const skillsCmd = `dart run skills@ get`;
           raw CREATE TABLE strings.
         </p>
         <div class="meta">
-          <span class="ver">0.1.1</span>
+          <span class="ver">0.2.0</span>
           <a href="https://pub.dev/packages/sqlite_schema_forge">pub.dev</a>
           <a href="https://github.com/albetnov/forge-flutter/tree/main/packages/sqlite_schema_forge">README source</a>
         </div>
@@ -437,7 +436,7 @@ const skillsCmd = `dart run skills@ get`;
           </p>
           <h3>Transform data around structure</h3>
           <p>
-            When a structural change needs data work first (splitting a column, formatting before a type change), <code class="inline">onUpgrade</code> and <code class="inline">onDowngrade</code> run inside the migration transaction. Destructive steps require opting in with <code class="inline">allowDestructive</code>. Since 0.1.1 a version gap alone counts as out of date, so data-only callbacks and the <code class="inline">PRAGMA user_version</code> stamp run even when the plan has no DDL steps; pass <code class="inline">disableForeignKeys: true</code> to suspend FK enforcement around the migration when data moves or rebuilds would trip transient violations.
+            Use <code class="inline">migrateWithUpgrades()</code> to bind hooks to adjacent versions with <code class="inline">Upgrade.from(a).to(b, hook)</code>. A destructive live-to-target plan requires definitions for every crossed transition; <code class="inline">MigrationHook.noop()</code> explicitly acknowledges a transition that needs no data callback. Since the planner compares the live database directly to the target, it cannot attribute a destructive step to one historical transition without schema snapshots. Hooks run in order inside the migration transaction. Pass <code class="inline">disableForeignKeys: true</code> to suspend FK enforcement around migrations when data moves or rebuilds would trip transient violations.
           </p>
           <figure class="code">
             <figcaption><span>upgrade with data work</span><button class="copy" data-copy="code-upgrade">Copy</button></figcaption>

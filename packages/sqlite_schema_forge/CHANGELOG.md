@@ -1,3 +1,11 @@
+## 0.2.0
+
+- Add `migrateWithUpgrades()` with version-bound `Upgrade.from().to()` hooks.
+  Destructive plans require explicit definitions for every crossed transition;
+  `MigrationHook.noop()` acknowledges intentional data loss for one transition.
+- Add `applyPlanWithHook()` for externally managed versioning with explicit
+  acknowledgement of destructive plans.
+
 ## 0.1.1
 
 - Fix `migrate()` skipping `onUpgrade`/`onDowngrade` and the
