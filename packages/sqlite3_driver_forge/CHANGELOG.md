@@ -1,3 +1,7 @@
+## 0.2.1
+
+- Raise the `sqlite_schema_forge` dependency constraint to `^0.2.0`.
+
 ## 0.2.0
 
 - **Tracing.** `SqliteDriverConfig.onTrace` (and the `onTrace` argument on

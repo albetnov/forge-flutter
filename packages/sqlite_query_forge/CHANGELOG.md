@@ -1,3 +1,8 @@
+## 0.4.2
+
+- Raise the `sqlite_schema_forge` dependency constraint to `^0.2.0` for the
+  version-bound migration hook API.
+
 ## 0.4.1
 
 - Fixes immutable builders silently dropping state when chained in a
