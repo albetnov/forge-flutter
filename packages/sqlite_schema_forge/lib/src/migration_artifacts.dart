@@ -270,7 +270,11 @@ final class MigrationManifest {
       ..sort((a, b) => a.firstTargetVersion.compareTo(b.firstTargetVersion));
     for (final chunk in orderedChunks) {
       if (chunk.firstTargetVersion > chunk.lastTargetVersion ||
-          chunk.file.trim().isEmpty) {
+          chunk.file.trim().isEmpty ||
+          chunk.file.contains('/') ||
+          chunk.file.contains('\\') ||
+          chunk.file == '.' ||
+          chunk.file == '..') {
         throw FormatException('Invalid migration chunk entry "${chunk.file}".');
       }
       if (chunk.lastTargetVersion - chunk.firstTargetVersion + 1 > 10) {

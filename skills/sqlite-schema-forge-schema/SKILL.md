@@ -42,6 +42,21 @@ Pure values — no instance to create beyond the `const Schema`, no
 - Identifiers quote in exactly one place; `RawSql` never quotes. FK renders `REFERENCES "t"("c")` only when both ends set.
 - `Table.toCreateTableSql()` always `IF NOT EXISTS`.
 
+## Optional structural snapshots
+
+`SchemaSnapshot.encode(schema)` writes deterministic, versioned JSON metadata
+for the declared schema. It does not generate Dart or migration code. Use the
+host CLI with an explicit Dart entry point that prints the snapshot JSON:
+
+```sh
+dart run sqlite_schema_forge:snapshot capture --entry tool/schema.dart --out schemaforge/snapshots/0001.json
+```
+
+Snapshots are immutable records of the schema at that version. Capture refuses
+to replace a conflicting file; never recreate an old version from the current
+mutable schema declaration. See the migration skill for compiling and
+verifying precomputed migration artifacts.
+
 ## Caveats / workarounds
 
 - No column-type validation beyond what you declare: a `TEXT` column with `int` default emits `DEFAULT 1` unchecked — keep Dart-side and DDL types aligned.

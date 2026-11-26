@@ -102,6 +102,48 @@ jobs:
       - name: Resolve workspace
         run: flutter pub get
 
+      - name: Verify SQLite schema migration history
+        if: matrix.package == 'sqlite_schema_forge'
+        working-directory: packages/sqlite_schema_forge
+        shell: bash
+        run: |
+          snapshots="schemaforge/snapshots"
+          migrations="schemaforge/migrations"
+          if [[ -d "$snapshots" || -d "$migrations" ]]; then
+            [[ -d "$snapshots" && -d "$migrations" ]] || {
+              echo "Both schema snapshots and migration artifacts must be checked in" >&2
+              exit 1
+            }
+            hook_args=()
+            if [[ -f schemaforge/hooks.json ]]; then
+              hook_args+=(--hooks-file schemaforge/hooks.json)
+            fi
+            dart run sqlite_schema_forge:snapshot verify \
+              --snapshots "$snapshots" --migrations "$migrations" "${hook_args[@]}"
+          else
+            echo "No checked-in precomputed schema history; verification skipped"
+          fi
+
+      - name: Exercise precomputed migration example
+        if: matrix.package == 'sqlite_schema_forge'
+        working-directory: packages/sqlite_schema_forge
+        run: |
+          dart run sqlite_schema_forge:snapshot capture \
+            --entry example/precomputed_history/snapshot_v1.dart \
+            --out example/precomputed_history/snapshots/0001.json
+          dart run sqlite_schema_forge:snapshot capture \
+            --entry example/precomputed_history/snapshot_v2.dart \
+            --out example/precomputed_history/snapshots/0002.json
+          dart run sqlite_schema_forge:snapshot compile \
+            --snapshots example/precomputed_history/snapshots \
+            --out build/precomputed-history/migrations \
+            --hooks-file example/precomputed_history/hooks.json
+          dart run sqlite_schema_forge:snapshot verify \
+            --snapshots example/precomputed_history/snapshots \
+            --migrations build/precomputed-history/migrations \
+            --hooks-file example/precomputed_history/hooks.json
+          dart run example/precomputed_history/run.dart
+
       # `dart analyze <package>` walks subdirectories, including standalone
       # example apps that live outside the pub workspace. Without their own
       # `pub get`, the analyzer reports their `package:` imports as unresolved

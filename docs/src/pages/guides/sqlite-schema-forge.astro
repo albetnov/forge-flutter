@@ -48,10 +48,9 @@ const upgradeSnippet = `final result = await SqliteSchemaForge.migrateWithUpgrad
   db: db,
   targetSchema: appSchemaV7,
   upgrades: [
-    Upgrade.from(5).to(6, MigrationHook((db, from, to) async {
+    Upgrade.from(6).to(7, MigrationHook((db, from, to) async {
       await db.execute('UPDATE users SET age = 0 WHERE age IS NULL;');
     })),
-    Upgrade.from(6).to(7, MigrationHook.noop()),
   ],
   disableForeignKeys: true, // Suspend FK enforcement around rebuilds + data moves
 );`;
@@ -436,12 +435,27 @@ const skillsCmd = `dart run skills@ get`;
           </p>
           <h3>Transform data around structure</h3>
           <p>
-            Use <code class="inline">migrateWithUpgrades()</code> to bind hooks to adjacent versions with <code class="inline">Upgrade.from(a).to(b, hook)</code>. A destructive live-to-target plan requires definitions for every crossed transition; <code class="inline">MigrationHook.noop()</code> explicitly acknowledges a transition that needs no data callback. Since the planner compares the live database directly to the target, it cannot attribute a destructive step to one historical transition without schema snapshots. Hooks run in order inside the migration transaction. Pass <code class="inline">disableForeignKeys: true</code> to suspend FK enforcement around migrations when data moves or rebuilds would trip transient violations.
+            Use <code class="inline">migrateWithUpgrades()</code> for version-bound hooks. Runtime destructive acknowledgement must match the exact live-to-target range; an intermediate acknowledgement cannot authorize a skipped-version migration. Applicable custom hooks across skipped versions are rejected because runtime mode cannot reconstruct their schema boundaries. Adjacent hooks run before DDL inside the migration transaction. Use precomputed history for precise historical attribution. Pass <code class="inline">disableForeignKeys: true</code> to suspend FK enforcement around migrations when data moves or rebuilds would trip transient violations.
           </p>
           <figure class="code">
             <figcaption><span>upgrade with data work</span><button class="copy" data-copy="code-upgrade">Copy</button></figcaption>
             <pre><code id="code-upgrade" set:html={highlight(upgradeSnippet)} /></pre>
           </figure>
+          <h3>Precomputed migration history</h3>
+          <p>
+            Runtime planning stays the default. The runnable precomputed history example under <code class="inline">example/precomputed_history</code> captures two schema versions, compiles bounded JSON plan chunks, verifies the artifacts, and runs an after-schema data backfill against in-memory SQLite. This stores metadata only; it generates no Dart migration code. Capture refuses to replace a conflicting released snapshot, and verification detects stale snapshots or artifacts without rewriting them.
+          </p>
+          <figure class="code">
+            <figcaption><span>end-to-end workflow</span></figcaption>
+            <pre><code>{`dart run sqlite_schema_forge:snapshot capture --entry example/precomputed_history/snapshot_v1.dart --out example/precomputed_history/snapshots/0001.json
+dart run sqlite_schema_forge:snapshot capture --entry example/precomputed_history/snapshot_v2.dart --out example/precomputed_history/snapshots/0002.json
+dart run sqlite_schema_forge:snapshot compile --snapshots example/precomputed_history/snapshots --out build/precomputed-history/migrations --hooks-file example/precomputed_history/hooks.json
+dart run sqlite_schema_forge:snapshot verify --snapshots example/precomputed_history/snapshots --migrations build/precomputed-history/migrations --hooks-file example/precomputed_history/hooks.json
+dart run example/precomputed_history/run.dart`}</code></pre>
+          </figure>
+          <p>
+            At runtime, provide a <code class="inline">MigrationArtifactLoader</code> to <code class="inline">MigrationArtifactStore</code>. Plain Dart apps can read files; Flutter apps can use <code class="inline">rootBundle.loadString</code> and bundle the manifest and chunks as app assets. The core package has no Flutter dependency. Fresh and already-current databases skip history reads; invalid explicitly supplied history fails closed.
+          </p>
           <h3>Preview before committing</h3>
           <p>
             <code class="inline">plan()</code> computes the same migration as a dry run: inspect every step and its SQL, and check <code class="inline">hasDestructiveChanges</code> before anything writes.

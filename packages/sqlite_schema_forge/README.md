@@ -55,21 +55,112 @@ void main() async {
 
 SSF eliminates manual `up` and `down` migration files. Instead, the diffing engine calculates structural changes at runtime.
 
+### Optional precomputed migration history
+
+Runtime planning remains the default. For applications that need historical
+transition attribution or want plans compiled ahead of time, snapshots and
+plan chunks can be captured as JSON metadata. This does not generate Dart
+source or executable migration code.
+
+The runnable [`example/precomputed_history`](example/precomputed_history) walks
+through the full workflow. Its two host-runnable schema entry points define
+versions 1 and 2, and a hook metadata file declares that the v1-to-v2 data
+backfill runs after the new column is created. Capture each released version,
+compile and verify the history, then run the in-memory SQLite migration:
+
+```sh
+dart run sqlite_schema_forge:snapshot capture \
+  --entry example/precomputed_history/snapshot_v1.dart \
+  --out example/precomputed_history/snapshots/0001.json
+dart run sqlite_schema_forge:snapshot capture \
+  --entry example/precomputed_history/snapshot_v2.dart \
+  --out example/precomputed_history/snapshots/0002.json
+dart run sqlite_schema_forge:snapshot compile \
+  --snapshots example/precomputed_history/snapshots \
+  --out build/precomputed-history/migrations \
+  --hooks-file example/precomputed_history/hooks.json
+dart run sqlite_schema_forge:snapshot verify \
+  --snapshots example/precomputed_history/snapshots \
+  --migrations build/precomputed-history/migrations \
+  --hooks-file example/precomputed_history/hooks.json
+dart run example/precomputed_history/run.dart
+```
+
+The example prints `Schema v2: Ada Lovelace -> ada lovelace`. CI repeats these
+commands, so it checks the immutable snapshots, rebuilds and verifies the
+compiled artifacts, and exercises the runtime hook against SQLite.
+
+The entry point evaluates the actual Dart schema declarations on the host;
+Flutter application code is not loaded by the CLI. `capture` refuses to replace
+a conflicting versioned snapshot. `compile` needs at least two adjacent
+snapshots and writes only to a new or empty output directory. Use repeated
+`--hook from:to:beforePlan|afterPlan` flags to record non-destructive hook
+requirements and lifecycle boundaries. `verify` takes the same hook flags,
+checks snapshots and all generated artifacts, and never rewrites them. Run it
+in CI to catch stale history. For stable hook declarations, pass
+`--hooks-file schemaforge/hooks.json` to both commands. The file contains a
+JSON array such as `[ { "from": 1, "to": 2, "phase": "beforePlan" } ]`; CI
+reads it automatically when artifact directories are present.
+
+At runtime, supply a lazy loader. For a plain Dart application, a loader can
+read its bundled files:
+
+```dart
+import 'dart:io';
+
+import 'package:sqlite_schema_forge/sqlite_schema_forge.dart';
+
+final class MyMigrationFiles implements MigrationArtifactLoader {
+  @override
+  Future<String> loadManifest() =>
+      File('schemaforge/migrations/manifest.json').readAsString();
+
+  @override
+  Future<String> loadChunk(String file) =>
+      File('schemaforge/migrations/$file').readAsString();
+}
+
+final history = MigrationArtifactStore(MyMigrationFiles());
+
+await SqliteSchemaForge.migrateWithUpgrades(
+  db: db,
+  targetSchema: appSchema,
+  migrationHistory: history,
+  upgrades: [
+    Upgrade.from(1).to(2, MigrationHook((db, from, to) async {
+      // Apply the transition's data fix.
+    })),
+    Upgrade.from(2).to(3, MigrationHook.noop()),
+  ],
+);
+```
+
+For Flutter, implement `MigrationArtifactLoader` with `rootBundle.loadString`
+and declare the manifest and chunk files under the app's `assets` section.
+The core package has no Flutter dependency. The migration API checks the
+installed version before requesting history, so fresh and already-current
+databases do not load assets.
+
+Custom hook lifecycle comes from the manifest. `beforePlan` runs while the
+source schema is available; `afterPlan` runs after its destination plan. A
+missing, stale, or incompatible explicitly supplied history fails closed and
+does not fall back to runtime planning.
+
 ### Version-bound upgrade hooks (opt-in)
 
-Use `migrateWithUpgrades` to bind each hook to one adjacent version transition.
-When the overall plan is destructive, every crossed transition must have an
-explicit definition. `noop()` acknowledges that transition without a data
-callback:
+Use `migrateWithUpgrades` for version-bound hooks and destructive
+acknowledgement. Runtime planning sees the live-to-target diff, so a destructive
+migration requires `MigrationHook.noop()` on that exact range. For example, a
+5-to-9 migration requires 5-to-9 acknowledgement; a historical 5-to-6 hook
+does not authorize it. Custom hooks are supported for adjacent runtime
+migrations. Skipped-version custom hooks require precomputed history because
+their schema boundaries are unavailable.
 
 ```dart
 await SqliteSchemaForge.migrateWithUpgrades(
   db: db,
   targetSchema: appSchemaV7,
   upgrades: [
-    Upgrade.from(5).to(6, MigrationHook((db, from, to) async {
-      // Transform data for this transition.
-    })),
     Upgrade.from(6).to(7, MigrationHook.noop()),
   ],
 );
@@ -86,10 +177,9 @@ await SqliteSchemaForge.applyPlanWithHook(
 );
 ```
 
-The versioned API does not retain schema snapshots, so if any destructive
-change exists in the live-to-target plan it requires definitions for every
-crossed adjacent transition. The rejection lists the missing ranges and the
-destructive steps; `noop()` acknowledges an individual range.
+The rejection lists detected destructive changes and the actual migration
+range before running hooks or SQL. Use precomputed history when precise
+historical attribution is needed.
 
 The existing `migrate` and `applyPlan` methods remain available with their
 `allowDestructive` flag for compatibility.
@@ -151,6 +241,15 @@ await SqliteSchemaForge.applyPlan(
 );
 
 ```
+
+### Benchmarking planning and artifact overhead
+
+Run `dart run benchmark/migration_benchmark.dart [iterations]` from the package
+directory to measure runtime planning, artifact reads, plan deserialization,
+artifact validation, SQLite execution, and combined paths separately. It uses
+an in-memory SQLite database and loader, so it does not include storage I/O or
+row backfills. Results are measurements of this fixture, not production
+performance claims.
 
 ## Foreign Keys
 
