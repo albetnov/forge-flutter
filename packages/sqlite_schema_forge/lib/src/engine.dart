@@ -118,6 +118,13 @@ final class SqliteSchemaForge {
     if (installedVersion == targetSchema.version) {
       return const MigrationResult(migrated: false, executedSql: []);
     }
+    if (installedVersion == 0 && !await _hasUserSchema(db)) {
+      return _initializeFreshDatabase(
+        db: db,
+        targetSchema: targetSchema,
+        disableForeignKeys: disableForeignKeys,
+      );
+    }
     if (migrationHistory != null) {
       if (installedVersion > targetSchema.version) {
         throw StateError(
@@ -354,6 +361,58 @@ final class SqliteSchemaForge {
     return MigrationResult(migrated: true, executedSql: executed);
   }
 
+  static Future<MigrationResult> _initializeFreshDatabase({
+    required DatabaseExecutor db,
+    required Schema targetSchema,
+    required bool disableForeignKeys,
+  }) async {
+    // Plan directly from the empty live database to the latest target. This
+    // deliberately bypasses historical plans, hook resolution, and history I/O.
+    final migrationPlan = await plan(db: db, targetSchema: targetSchema);
+    final executed = <String>[];
+    Future<void> run() async {
+      await db.transaction((txn) async {
+        final result = await applyPlan(db: txn, plan: migrationPlan);
+        executed.addAll(result.executedSql);
+        final sql = 'PRAGMA user_version = ${targetSchema.version};';
+        await txn.execute(sql);
+        executed.add(sql);
+      });
+    }
+
+    if (disableForeignKeys) {
+      final wasEnabled = await _wereForeignKeysEnabled(db);
+      await db.execute('PRAGMA foreign_keys = OFF;');
+      executed.add('PRAGMA foreign_keys = OFF;');
+      try {
+        await run();
+      } finally {
+        if (wasEnabled) {
+          await db.execute('PRAGMA foreign_keys = ON;');
+          executed.add('PRAGMA foreign_keys = ON;');
+        }
+      }
+    } else {
+      await run();
+    }
+    return MigrationResult(migrated: true, executedSql: executed);
+  }
+
+  /// Returns true only when SQLite reports no application-owned schema objects.
+  /// An introspection failure is treated as non-empty to fail closed.
+  static Future<bool> _hasUserSchema(DatabaseExecutor db) async {
+    try {
+      final rows = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type IN "
+        "('table', 'index', 'view', 'trigger') "
+        "AND name NOT LIKE 'sqlite_%';",
+      );
+      return rows.isNotEmpty;
+    } catch (_) {
+      return true;
+    }
+  }
+
   /// Applies a plan with an explicit hook when it contains destructive steps.
   /// The hook receives the plan version range before DDL is applied.
   static Future<MigrationResult> applyPlanWithHook({
@@ -488,6 +547,9 @@ final class SqliteSchemaForge {
     bool allowDestructive = false,
     bool disableForeignKeys = false,
   }) async {
+    final versionRows = await db.rawQuery('PRAGMA user_version;');
+    final currentVersion = (versionRows.first['user_version'] as int?) ?? 0;
+    final fresh = currentVersion == 0 && !await _hasUserSchema(db);
     final migrationPlan = await plan(db: db, targetSchema: targetSchema);
     if (migrationPlan.isUpToDate) {
       return const MigrationResult(migrated: false, executedSql: []);
@@ -498,7 +560,8 @@ final class SqliteSchemaForge {
     Future<void> runMigration() async {
       await db.transaction((txn) async {
         // 1. Run version range callbacks
-        if (migrationPlan.fromVersion < targetSchema.version &&
+        if (!fresh &&
+            migrationPlan.fromVersion < targetSchema.version &&
             onUpgrade != null) {
           await onUpgrade(txn, migrationPlan.fromVersion, targetSchema.version);
         } else if (migrationPlan.fromVersion > targetSchema.version &&

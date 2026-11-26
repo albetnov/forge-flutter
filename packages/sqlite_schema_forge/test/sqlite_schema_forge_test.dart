@@ -47,6 +47,34 @@ final class _RecordingExecutor implements DatabaseExecutor {
 void main() {
   group('hook-backed migration API', () {
     test(
+      'fresh legacy migration skips historical onUpgrade callback',
+      () async {
+        final db = _RecordingExecutor();
+        var callbackCount = 0;
+
+        await SqliteSchemaForge.migrate(
+          db: db,
+          targetSchema: Schema(
+            version: 4,
+            tables: [
+              Table('users', [Column.id()]),
+            ],
+          ),
+          onUpgrade: (_, _, _) async => callbackCount++,
+        );
+
+        expect(callbackCount, 0);
+        expect(
+          db.statements.any(
+            (sql) => sql.contains('CREATE TABLE IF NOT EXISTS'),
+          ),
+          isTrue,
+        );
+        expect(db.transactionCount, 1);
+      },
+    );
+
+    test(
       'adjacent upgrade runs its bound callback before applying the plan',
       () async {
         final db = _RecordingExecutor()

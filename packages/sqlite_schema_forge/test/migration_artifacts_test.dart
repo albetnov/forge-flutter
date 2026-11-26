@@ -384,6 +384,153 @@ void main() {
         expect(db.transactionCount, 0);
       },
     );
+
+    test(
+      'fresh database creates target directly and bypasses hooks and history',
+      () async {
+        final target = Schema(
+          version: 3,
+          tables: [
+            Table('users', [Column.id(), Column.text('name')]),
+          ],
+        );
+        final loader = _MemoryArtifactLoader('invalid', const {});
+        final db = _MigrationExecutor(0);
+        var hookCalls = 0;
+
+        final result = await SqliteSchemaForge.migrateWithUpgrades(
+          db: db,
+          targetSchema: target,
+          migrationHistory: MigrationArtifactStore(loader),
+          upgrades: [
+            Upgrade.from(1)
+                .to(2, MigrationHook((_, _, _) async => hookCalls++)),
+            Upgrade.from(2).to(3, MigrationHook.noop()),
+          ],
+        );
+
+        expect(loader.manifestReads, 0);
+        expect(hookCalls, 0);
+        expect(
+          db.events,
+          contains('sql:${target.tables.single.toCreateTableSql()}'),
+        );
+        expect(db.version, 3);
+        expect(result.migrated, isTrue);
+      },
+    );
+
+    test('unversioned database with existing tables is not fresh', () async {
+      final db = _MigrationExecutor(0)
+        ..catalogObjects.add('legacy_users')
+        ..catalogColumns['legacy_users'] = {'id', 'old'};
+      final target = Schema(
+        version: 2,
+        tables: [
+          Table('legacy_users', [Column.id()]),
+        ],
+      );
+
+      await SqliteSchemaForge.migrateWithUpgrades(
+        db: db,
+        targetSchema: target,
+        upgrades: [Upgrade.from(0).to(2, MigrationHook.noop())],
+      );
+
+      expect(
+        db.events.any((event) => event.contains('DROP TABLE legacy_users;')),
+        isTrue,
+      );
+      expect(db.version, 2);
+    });
+
+    test(
+      'failed post-plan hook rolls back plan SQL and version updates',
+      () async {
+        final target = Schema(
+          version: 2,
+          tables: [
+            Table('users', [Column.id()]),
+          ],
+        );
+        final bundle = MigrationArtifactBundle.build(
+          plans: [_plan(1)],
+          hooks: {
+            (1, 2): const MigrationHookMetadata(MigrationHookPhase.afterPlan),
+          },
+          schemaFingerprints: {2: SchemaSnapshot.fingerprint(target)},
+        );
+        final db = _MigrationExecutor(1);
+
+        await expectLater(
+          SqliteSchemaForge.migrateWithUpgrades(
+            db: db,
+            targetSchema: target,
+            migrationHistory: MigrationArtifactStore(
+              _MemoryArtifactLoader(
+                bundle.manifest.encode(),
+                bundle.chunkFiles,
+              ),
+            ),
+            upgrades: [
+              Upgrade.from(1).to(
+                2,
+                MigrationHook((_, _, _) async {
+                  throw StateError('hook failed');
+                }),
+              ),
+            ],
+          ),
+          throwsA(
+            isA<StateError>().having(
+              (error) => error.message,
+              'message',
+              'hook failed',
+            ),
+          ),
+        );
+        expect(db.version, 1);
+        expect(db.events, isEmpty);
+        expect(db.transactionCount, 1);
+      },
+    );
+
+    test('runtime hook failure rolls back DDL and schema version', () async {
+      final db = _MigrationExecutor(1)
+        ..catalogObjects.add('users')
+        ..catalogColumns['users'] = {'id'};
+
+      await expectLater(
+        SqliteSchemaForge.migrateWithUpgrades(
+          db: db,
+          targetSchema: Schema(
+            version: 2,
+            tables: [
+              Table('users', [Column.id(), Column.text('name')]),
+            ],
+          ),
+          upgrades: [
+            Upgrade.from(1).to(
+              2,
+              MigrationHook((_, _, _) async {
+                throw StateError('runtime hook failed');
+              }),
+            ),
+          ],
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            'runtime hook failed',
+          ),
+        ),
+      );
+
+      expect(db.version, 1);
+      expect(db.events, isEmpty);
+      expect(db.transactionCount, 1);
+    });
   });
 }
 
@@ -416,6 +563,8 @@ final class _MigrationExecutor implements DatabaseExecutor {
   int version;
   int transactionCount = 0;
   final List<String> events = [];
+  final List<String> catalogObjects = [];
+  final Map<String, Set<String>> catalogColumns = {};
 
   @override
   Future<List<Map<String, Object?>>> rawQuery(
@@ -432,6 +581,18 @@ final class _MigrationExecutor implements DatabaseExecutor {
         {'foreign_keys': 1},
       ];
     }
+    if (sql.contains('sqlite_master')) {
+      return [
+        for (final name in catalogObjects) {'name': name},
+      ];
+    }
+    if (sql.startsWith('PRAGMA table_info(')) {
+      final name = sql.substring(19, sql.length - 2);
+      return [
+        for (final column in catalogColumns[name] ?? {}) {'name': column},
+      ];
+    }
+    if (sql.startsWith('PRAGMA index_list(')) return [];
     throw UnsupportedError('Unexpected read query: $sql');
   }
 
@@ -450,6 +611,16 @@ final class _MigrationExecutor implements DatabaseExecutor {
     Future<T> Function(DatabaseExecutor txn) action,
   ) async {
     transactionCount++;
-    return action(this);
+    final previousVersion = version;
+    final previousEvents = [...events];
+    try {
+      return await action(this);
+    } catch (_) {
+      version = previousVersion;
+      events
+        ..clear()
+        ..addAll(previousEvents);
+      rethrow;
+    }
   }
 }
