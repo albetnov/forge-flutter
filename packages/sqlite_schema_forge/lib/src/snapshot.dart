@@ -16,6 +16,21 @@ final class SchemaSnapshot {
   static String encode(Schema schema) =>
       const JsonEncoder.withIndent('  ').convert(toJson(schema));
 
+  /// Stable non-cryptographic fingerprint for schema identity checks.
+  ///
+  /// This detects stale or mismatched artifacts; it is not an authenticity
+  /// signature. The canonical snapshot JSON is the hash input.
+  static String fingerprint(Schema schema) {
+    var hash = 0xcbf29ce484222325;
+    for (final byte in utf8.encode(
+      const JsonEncoder().convert(toJson(schema)),
+    )) {
+      hash ^= byte;
+      hash = (hash * 0x100000001b3) & 0xffffffffffffffff;
+    }
+    return 'fnv1a64:${hash.toRadixString(16).padLeft(16, '0')}';
+  }
+
   /// Returns the canonical JSON-compatible representation of [schema].
   static Map<String, Object?> toJson(Schema schema) => {
     'formatVersion': formatVersion,

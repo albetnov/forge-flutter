@@ -507,8 +507,14 @@ final class MigrationArtifactBundle {
           fromVersion: plan.fromVersion,
           toVersion: plan.toVersion,
           destructive: plan.hasDestructiveChanges,
-          requiresHook: hooks.containsKey((plan.fromVersion, plan.toVersion)),
-          hookPhase: hooks[(plan.fromVersion, plan.toVersion)]?.phase,
+          requiresHook:
+              plan.hasDestructiveChanges ||
+              hooks.containsKey((plan.fromVersion, plan.toVersion)),
+          hookPhase:
+              hooks[(plan.fromVersion, plan.toVersion)]?.phase ??
+              (plan.hasDestructiveChanges
+                  ? MigrationHookPhase.beforePlan
+                  : null),
           fromFingerprint: schemaFingerprints[plan.fromVersion],
           toFingerprint: schemaFingerprints[plan.toVersion],
         ),

@@ -207,6 +207,183 @@ void main() {
         throwsFormatException,
       );
     });
+
+    test('precomputed migration validates hooks then executes plans at declared boundaries', () async {
+      final target = Schema(
+        version: 3,
+        tables: [
+          Table('users', [Column.id()]),
+        ],
+      );
+      final bundle = MigrationArtifactBundle.build(
+        plans: [
+          MigrationPlan(
+            fromVersion: 1,
+            toVersion: 2,
+            steps: const [
+              PlanStep(
+                type: ChangeType.addColumn,
+                targetTable: 'users',
+                sql: 'ALTER TABLE users ADD COLUMN name TEXT;',
+                description: 'Add name',
+              ),
+            ],
+          ),
+          MigrationPlan(
+            fromVersion: 2,
+            toVersion: 3,
+            steps: const [
+              PlanStep(
+                type: ChangeType.rebuildTable,
+                targetTable: 'users',
+                sql: 'DROP TABLE old_users;',
+                description: 'Drop old users',
+                isDestructive: true,
+              ),
+            ],
+          ),
+        ],
+        hooks: {
+          (1, 2): const MigrationHookMetadata(MigrationHookPhase.beforePlan),
+        },
+        schemaFingerprints: {3: SchemaSnapshot.fingerprint(target)},
+      );
+      final db = _MigrationExecutor(1);
+      final hookCalls = <String>[];
+
+      final result = await SqliteSchemaForge.migrateWithUpgrades(
+        db: db,
+        targetSchema: target,
+        migrationHistory: MigrationArtifactStore(
+          _MemoryArtifactLoader(bundle.manifest.encode(), bundle.chunkFiles),
+        ),
+        upgrades: [
+          Upgrade.from(1).to(
+            2,
+            MigrationHook((txn, from, to) async {
+              hookCalls.add('$from->$to');
+              (txn as _MigrationExecutor).events.add('hook:$from->$to');
+            }),
+          ),
+          Upgrade.from(2).to(3, MigrationHook.noop()),
+        ],
+      );
+
+      expect(hookCalls, ['1->2']);
+      expect(db.events, [
+        'hook:1->2',
+        'sql:ALTER TABLE users ADD COLUMN name TEXT;',
+        'version:2',
+        'sql:DROP TABLE old_users;',
+        'version:3',
+      ]);
+      expect(db.version, 3);
+      expect(result.migrated, isTrue);
+    });
+
+    test('precomputed mode rejects missing hooks and target fingerprint mismatch before transaction', () async {
+      final target = Schema(
+        version: 2,
+        tables: [
+          Table('users', [Column.id()]),
+        ],
+      );
+      final bundle = MigrationArtifactBundle.build(
+        plans: [_plan(1, destructive: true)],
+        schemaFingerprints: {2: 'wrong-fingerprint'},
+      );
+      final db = _MigrationExecutor(1);
+      final store = MigrationArtifactStore(
+        _MemoryArtifactLoader(bundle.manifest.encode(), bundle.chunkFiles),
+      );
+
+      await expectLater(
+        SqliteSchemaForge.migrateWithUpgrades(
+          db: db,
+          targetSchema: target,
+          migrationHistory: store,
+          upgrades: [Upgrade.from(1).to(2, MigrationHook.noop())],
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            contains('fingerprint mismatch'),
+          ),
+        ),
+      );
+      expect(db.transactionCount, 0);
+      expect(db.events, isEmpty);
+
+      final matching = MigrationArtifactBundle.build(
+        plans: [_plan(1, destructive: true)],
+        schemaFingerprints: {2: SchemaSnapshot.fingerprint(target)},
+      );
+      await expectLater(
+        SqliteSchemaForge.migrateWithUpgrades(
+          db: db,
+          targetSchema: target,
+          migrationHistory: MigrationArtifactStore(
+            _MemoryArtifactLoader(
+              matching.manifest.encode(),
+              matching.chunkFiles,
+            ),
+          ),
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            contains('requires a hook'),
+          ),
+        ),
+      );
+      expect(db.transactionCount, 0);
+      expect(db.events, isEmpty);
+    });
+
+    test(
+      'already-current precomputed migrations do not load artifacts',
+      () async {
+        final db = _MigrationExecutor(2);
+        final loader = _MemoryArtifactLoader('invalid', const {});
+
+        final result = await SqliteSchemaForge.migrateWithUpgrades(
+          db: db,
+          targetSchema: Schema(version: 2, tables: const []),
+          migrationHistory: MigrationArtifactStore(loader),
+        );
+
+        expect(result.migrated, isFalse);
+        expect(loader.manifestReads, 0);
+        expect(db.transactionCount, 0);
+      },
+    );
+
+    test(
+      'explicit precomputed history rejects downgrade without loading assets',
+      () async {
+        final db = _MigrationExecutor(3);
+        final loader = _MemoryArtifactLoader('invalid', const {});
+
+        await expectLater(
+          SqliteSchemaForge.migrateWithUpgrades(
+            db: db,
+            targetSchema: Schema(version: 2, tables: const []),
+            migrationHistory: MigrationArtifactStore(loader),
+          ),
+          throwsA(
+            isA<StateError>().having(
+              (error) => error.message,
+              'message',
+              contains('forward-only'),
+            ),
+          ),
+        );
+        expect(loader.manifestReads, 0);
+        expect(db.transactionCount, 0);
+      },
+    );
   });
 }
 
@@ -230,5 +407,49 @@ final class _MemoryArtifactLoader implements MigrationArtifactLoader {
     final contents = chunks[file];
     if (contents == null) throw StateError('Missing asset: $file');
     return contents;
+  }
+}
+
+final class _MigrationExecutor implements DatabaseExecutor {
+  _MigrationExecutor(this.version);
+
+  int version;
+  int transactionCount = 0;
+  final List<String> events = [];
+
+  @override
+  Future<List<Map<String, Object?>>> rawQuery(
+    String sql, [
+    List<Object?>? args,
+  ]) async {
+    if (sql == 'PRAGMA user_version;') {
+      return [
+        {'user_version': version},
+      ];
+    }
+    if (sql == 'PRAGMA foreign_keys;') {
+      return [
+        {'foreign_keys': 1},
+      ];
+    }
+    throw UnsupportedError('Unexpected read query: $sql');
+  }
+
+  @override
+  Future<void> execute(String sql, [List<Object?>? args]) async {
+    if (sql.startsWith('PRAGMA user_version = ')) {
+      version = int.parse(RegExp(r'\d+').firstMatch(sql)!.group(0)!);
+      events.add('version:$version');
+    } else {
+      events.add('sql:$sql');
+    }
+  }
+
+  @override
+  Future<T> transaction<T>(
+    Future<T> Function(DatabaseExecutor txn) action,
+  ) async {
+    transactionCount++;
+    return action(this);
   }
 }

@@ -1,7 +1,9 @@
 import 'package:sqlite_schema_forge/src/executor.dart';
+import 'package:sqlite_schema_forge/src/migration_artifacts.dart';
 import 'package:sqlite_schema_forge/src/plan.dart';
 import 'package:sqlite_schema_forge/src/schema.dart';
 import 'package:sqlite_schema_forge/src/schema_differ.dart';
+import 'package:sqlite_schema_forge/src/snapshot.dart';
 
 /// Version-to-version hook run inside the migration transaction for data
 /// fixes. Receives the transaction's [db] and the `fromVersion`/`toVersion`
@@ -108,8 +110,50 @@ final class SqliteSchemaForge {
     required DatabaseExecutor db,
     required Schema targetSchema,
     List<UpgradeDefinition> upgrades = const [],
+    MigrationArtifactStore? migrationHistory,
     bool disableForeignKeys = false,
   }) async {
+    final versionResult = await db.rawQuery('PRAGMA user_version;');
+    final installedVersion = (versionResult.first['user_version'] as int?) ?? 0;
+    if (installedVersion == targetSchema.version) {
+      return const MigrationResult(migrated: false, executedSql: []);
+    }
+    if (migrationHistory != null) {
+      if (installedVersion > targetSchema.version) {
+        throw StateError(
+          'Precomputed migration history is forward-only; cannot migrate '
+          'from $installedVersion down to ${targetSchema.version}.',
+        );
+      }
+      final path = await migrationHistory.loadPath(
+        fromVersion: installedVersion,
+        toVersion: targetSchema.version,
+      );
+      final targetRecord = path.transitions.last;
+      final expectedFingerprint = targetRecord.toFingerprint;
+      if (expectedFingerprint == null) {
+        throw StateError(
+          'Migration history has no schema fingerprint for target version '
+          '${targetSchema.version}; regenerate the artifacts.',
+        );
+      }
+      final actualFingerprint = SchemaSnapshot.fingerprint(targetSchema);
+      if (expectedFingerprint != actualFingerprint) {
+        throw StateError(
+          'Migration history target schema fingerprint mismatch for version '
+          '${targetSchema.version}. Expected $expectedFingerprint but the '
+          'provided target schema is $actualFingerprint.',
+        );
+      }
+      return _applyPrecomputedPath(
+        db: db,
+        targetSchema: targetSchema,
+        path: path,
+        upgrades: upgrades,
+        disableForeignKeys: disableForeignKeys,
+      );
+    }
+
     final migrationPlan = await plan(db: db, targetSchema: targetSchema);
     if (migrationPlan.isUpToDate) {
       return const MigrationResult(migrated: false, executedSql: []);
@@ -199,6 +243,96 @@ final class SqliteSchemaForge {
         final sql = 'PRAGMA user_version = ${targetSchema.version};';
         await txn.execute(sql);
         executed.add(sql);
+      });
+    }
+
+    if (disableForeignKeys) {
+      final wasEnabled = await _wereForeignKeysEnabled(db);
+      await db.execute('PRAGMA foreign_keys = OFF;');
+      executed.add('PRAGMA foreign_keys = OFF;');
+      try {
+        await run();
+      } finally {
+        if (wasEnabled) {
+          await db.execute('PRAGMA foreign_keys = ON;');
+          executed.add('PRAGMA foreign_keys = ON;');
+        }
+      }
+    } else {
+      await run();
+    }
+    return MigrationResult(migrated: true, executedSql: executed);
+  }
+
+  static Future<MigrationResult> _applyPrecomputedPath({
+    required DatabaseExecutor db,
+    required Schema targetSchema,
+    required LoadedMigrationPath path,
+    required List<UpgradeDefinition> upgrades,
+    required bool disableForeignKeys,
+  }) async {
+    final crossed = path.transitions
+        .map((transition) => (transition.fromVersion, transition.toVersion))
+        .toSet();
+    final upgradesByRange = <(int, int), UpgradeDefinition>{};
+    for (final upgrade in upgrades) {
+      final range = (upgrade.fromVersion, upgrade.toVersion);
+      if (!crossed.contains(range)) continue;
+      if (upgradesByRange.containsKey(range)) {
+        throw StateError(
+          'Duplicate hook registration for transition ${range.$1}->${range.$2}.',
+        );
+      }
+      upgradesByRange[range] = upgrade;
+    }
+    for (final range in upgradesByRange.keys) {
+      final transition = path.transitions.singleWhere(
+        (item) => item.fromVersion == range.$1 && item.toVersion == range.$2,
+      );
+      if (!transition.requiresHook) {
+        throw StateError(
+          'Hook registered for ${range.$1}->${range.$2}, but migration '
+          'history does not declare that transition as requiring a hook.',
+        );
+      }
+    }
+    for (final transition in path.transitions) {
+      final range = (transition.fromVersion, transition.toVersion);
+      if (transition.requiresHook && !upgradesByRange.containsKey(range)) {
+        throw StateError(
+          'Migration history requires a hook for ${range.$1}->${range.$2}. '
+          'Register Upgrade.from(${range.$1}).to(${range.$2}, hook).',
+        );
+      }
+    }
+
+    final executed = <String>[];
+    Future<void> run() async {
+      await db.transaction((txn) async {
+        for (var i = 0; i < path.plans.length; i++) {
+          final plan = path.plans[i];
+          final transition = path.transitions[i];
+          final hook =
+              upgradesByRange[(transition.fromVersion, transition.toVersion)]
+                  ?.hook;
+          if (hook != null &&
+              transition.hookPhase == MigrationHookPhase.beforePlan) {
+            await hook.call(txn, transition.fromVersion, transition.toVersion);
+          }
+          final result = await applyPlan(
+            db: txn,
+            plan: plan,
+            allowDestructive: transition.destructive,
+          );
+          executed.addAll(result.executedSql);
+          if (hook != null &&
+              transition.hookPhase == MigrationHookPhase.afterPlan) {
+            await hook.call(txn, transition.fromVersion, transition.toVersion);
+          }
+          final versionSql = 'PRAGMA user_version = ${transition.toVersion};';
+          await txn.execute(versionSql);
+          executed.add(versionSql);
+        }
       });
     }
 
