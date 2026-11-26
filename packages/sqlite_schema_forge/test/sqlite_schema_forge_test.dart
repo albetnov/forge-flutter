@@ -47,18 +47,17 @@ final class _RecordingExecutor implements DatabaseExecutor {
 void main() {
   group('hook-backed migration API', () {
     test(
-      'versioned upgrades run only their bound callbacks in order',
+      'adjacent upgrade runs its bound callback before applying the plan',
       () async {
         final db = _RecordingExecutor()
           ..version = 5
           ..existingTables.add('users')
           ..existingColumns['users'] = {'id'};
         final calls = <String>[];
-
         await SqliteSchemaForge.migrateWithUpgrades(
           db: db,
           targetSchema: Schema(
-            version: 7,
+            version: 6,
             tables: [
               Table('users', [Column.id('id')]),
             ],
@@ -68,7 +67,6 @@ void main() {
               6,
               MigrationHook((_, from, to) async => calls.add('$from->$to')),
             ),
-            Upgrade.from(6).to(7, MigrationHook.noop()),
           ],
         );
 
@@ -78,12 +76,34 @@ void main() {
     );
 
     test(
-      'destructive upgrade reports missing exact transition definitions',
+      'exact live-to-target noop acknowledges detected destructive changes',
       () async {
         final db = _RecordingExecutor()
           ..version = 5
           ..existingTables.add('users')
           ..existingColumns['users'] = {'id', 'old'};
+        await SqliteSchemaForge.migrateWithUpgrades(
+          db: db,
+          targetSchema: Schema(
+            version: 6,
+            tables: [
+              Table('users', [Column.id('id')]),
+            ],
+          ),
+          upgrades: [Upgrade.from(5).to(6, MigrationHook.noop())],
+        );
+        expect(db.transactionCount, 1);
+      },
+    );
+
+    test(
+      'intermediate noop does not acknowledge a skipped destructive range',
+      () async {
+        final db = _RecordingExecutor()
+          ..version = 5
+          ..existingTables.addAll(['users', 'posts'])
+          ..existingColumns['users'] = {'id', 'old'}
+          ..existingColumns['posts'] = {'id', 'legacy'};
 
         await expectLater(
           SqliteSchemaForge.migrateWithUpgrades(
@@ -92,6 +112,7 @@ void main() {
               version: 7,
               tables: [
                 Table('users', [Column.id('id')]),
+                Table('posts', [Column.id('id')]),
               ],
             ),
             upgrades: [Upgrade.from(6).to(7, MigrationHook.noop())],
@@ -100,40 +121,53 @@ void main() {
             isA<StateError>().having(
               (error) => error.message,
               'message',
-              contains('5->6'),
+              allOf(
+                contains('5 to 7'),
+                contains('users'),
+                contains('posts'),
+                contains('exact-range acknowledgement'),
+              ),
             ),
           ),
         );
+        expect(db.transactionCount, 0);
       },
     );
 
     test(
-      'migrateWithHooks rejects missing upgrade hook with destructive steps',
+      'custom hook on an exact skipped range is rejected before mutation',
       () async {
         final db = _RecordingExecutor()
-          ..version = 1
+          ..version = 5
           ..existingTables.add('users')
-          ..existingColumns['users'] = {'id', 'obsolete'};
+          ..existingColumns['users'] = {'id'};
 
         await expectLater(
-          SqliteSchemaForge.migrateWithHooks(
+          SqliteSchemaForge.migrateWithUpgrades(
             db: db,
             targetSchema: Schema(
-              version: 2,
+              version: 9,
               tables: [
-                Table('users', [Column.id('id')]),
+                Table('users', [Column.id()]),
               ],
             ),
+            upgrades: [
+              Upgrade.from(5).to(9, MigrationHook((_, _, _) async {})),
+            ],
           ),
           throwsA(
             isA<StateError>().having(
               (error) => error.message,
               'message',
-              allOf(contains('onUpgrade'), contains('users')),
+              allOf(
+                contains('5 -> 9'),
+                contains('precomputed migration history'),
+              ),
             ),
           ),
         );
         expect(db.transactionCount, 0);
+        expect(db.statements, isEmpty);
       },
     );
 
