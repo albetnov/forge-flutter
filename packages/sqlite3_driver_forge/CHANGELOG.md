@@ -1,3 +1,8 @@
+## 0.2.2
+
+- Widen the `sqlite_schema_forge` dependency constraint to `^0.3.0`.
+  No driver API change.
+
 ## 0.2.1
 
 - Raise the `sqlite_schema_forge` dependency constraint to `^0.2.0`.

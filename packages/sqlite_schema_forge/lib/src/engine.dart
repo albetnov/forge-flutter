@@ -547,10 +547,8 @@ final class SqliteSchemaForge {
     bool allowDestructive = false,
     bool disableForeignKeys = false,
   }) async {
-    final versionRows = await db.rawQuery('PRAGMA user_version;');
-    final currentVersion = (versionRows.first['user_version'] as int?) ?? 0;
-    final fresh = currentVersion == 0 && !await _hasUserSchema(db);
     final migrationPlan = await plan(db: db, targetSchema: targetSchema);
+    final fresh = migrationPlan.fromVersion == 0 && !await _hasUserSchema(db);
     if (migrationPlan.isUpToDate) {
       return const MigrationResult(migrated: false, executedSql: []);
     }

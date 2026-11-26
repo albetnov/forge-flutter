@@ -1,3 +1,17 @@
+## 0.3.0
+
+- **Breaking:** runtime destructive acknowledgement in `migrateWithUpgrades()`
+  must match the actual live-to-target version range. `DestructiveChange`
+  selectors are removed, and custom hooks across skipped runtime versions are
+  rejected because their historical schema boundaries are unavailable.
+- Add optional precomputed migration history: deterministic schema snapshots,
+  compiled and validated JSON plan chunks, lazy artifact loading, and the
+  `snapshot` capture/compile/verify CLI. Existing runtime planning remains the
+  default; explicitly supplied invalid history fails closed.
+- Define `beforePlan` and `afterPlan` hook boundaries for precomputed history.
+  Fresh databases create the target schema directly without resolving
+  historical artifacts or hooks.
+
 ## 0.2.0
 
 - Add `migrateWithUpgrades()` with version-bound `Upgrade.from().to()` hooks.

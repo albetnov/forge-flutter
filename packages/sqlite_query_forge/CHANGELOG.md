@@ -1,3 +1,8 @@
+## 0.4.3
+
+- Widen the `sqlite_schema_forge` dependency constraint to `^0.3.0` for the
+  precomputed migration history release. No query API change.
+
 ## 0.4.2
 
 - Raise the `sqlite_schema_forge` dependency constraint to `^0.2.0` for the

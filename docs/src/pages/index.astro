@@ -23,9 +23,9 @@ const lines = [
     platform: "P2",
     pkg: "sqlite_schema_forge",
     runs: "Declarative schema + auto-migration",
-    provides: "Schema · Table · Column · plan / applyPlan · versioned Upgrade hooks",
+    provides: "Schema · Table · Column · auto-migrate · precomputed history",
     depends: "Origin of the SQLite chain",
-    version: "0.2.0",
+    version: "0.3.0",
     short: "ORIGIN",
     add: "dart pub add sqlite_schema_forge",
     links: [
@@ -40,7 +40,7 @@ const lines = [
     runs: "Zero-cost declarative queries",
     provides: "SelectBuilder · Expression · bound args",
     depends: "Via P2 · schema types",
-    version: "0.4.2",
+    version: "0.4.3",
     short: "VIA P2",
     add: "dart pub add sqlite_query_forge",
     links: [
@@ -55,7 +55,7 @@ const lines = [
     runs: "Background-isolate driver",
     provides: "ForgeExecutor · DatabaseExecutor · SQLCipher",
     depends: "Via P2 · P3 · serves both contracts",
-    version: "0.2.1",
+    version: "0.2.2",
     short: "VIA P2·P3",
     add: "dart pub add sqlite3_driver_forge",
     links: [
