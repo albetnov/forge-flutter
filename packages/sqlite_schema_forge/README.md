@@ -63,32 +63,45 @@ plan chunks can be captured as JSON metadata. This does not generate Dart
 source or executable migration code.
 
 The runnable [`example/precomputed_history`](example/precomputed_history) walks
-through the full workflow. Its two host-runnable schema entry points define
-versions 1 and 2, and a hook metadata file declares that the v1-to-v2 data
-backfill runs after the new column is created. Capture each released version,
-compile and verify the history, then run the in-memory SQLite migration:
+through initial compilation and an incremental release. Its v1-to-v2 hook
+backfills a column after DDL. The v3 transition is then appended from a rolling
+checkpoint pair, without loading the older schema snapshots:
 
 ```sh
 dart run sqlite_schema_forge:snapshot capture \
   --entry example/precomputed_history/snapshot_v1.dart \
-  --out example/precomputed_history/snapshots/0001.json
+  --out build/precomputed-history/snapshots/0001.json
 dart run sqlite_schema_forge:snapshot capture \
   --entry example/precomputed_history/snapshot_v2.dart \
-  --out example/precomputed_history/snapshots/0002.json
+  --out build/precomputed-history/snapshots/0002.json
 dart run sqlite_schema_forge:snapshot compile \
-  --snapshots example/precomputed_history/snapshots \
+  --snapshots build/precomputed-history/snapshots \
   --out build/precomputed-history/migrations \
   --hooks-file example/precomputed_history/hooks.json
 dart run sqlite_schema_forge:snapshot verify \
-  --snapshots example/precomputed_history/snapshots \
+  --snapshots build/precomputed-history/snapshots \
   --migrations build/precomputed-history/migrations \
   --hooks-file example/precomputed_history/hooks.json
+dart run sqlite_schema_forge:snapshot compact \
+  --snapshots build/precomputed-history/snapshots \
+  --migrations build/precomputed-history/migrations \
+  --out build/precomputed-history/checkpoints \
+  --hooks-file example/precomputed_history/hooks.json
+dart run sqlite_schema_forge:snapshot advance \
+  --entry example/precomputed_history/snapshot_v3.dart \
+  --checkpoints build/precomputed-history/checkpoints \
+  --migrations build/precomputed-history/migrations \
+  --hooks-file example/precomputed_history/hooks.json
+dart run sqlite_schema_forge:snapshot verify \
+  --checkpoints build/precomputed-history/checkpoints \
+  --migrations build/precomputed-history/migrations
 dart run example/precomputed_history/run.dart
 ```
 
-The example prints `Schema v2: Ada Lovelace -> ada lovelace`. CI repeats these
-commands, so it checks the immutable snapshots, rebuilds and verifies the
-compiled artifacts, and exercises the runtime hook against SQLite.
+The example prints `Schema v3: Ada Lovelace -> ada lovelace`. The compacted
+artifacts retain the v1 migration path; incremental verification needs only
+the latest two schema checkpoints. CI repeats these commands and exercises a
+v1 database against the resulting v3 artifact history.
 
 The entry point evaluates the actual Dart schema declarations on the host;
 Flutter application code is not loaded by the CLI. `capture` refuses to replace
@@ -101,6 +114,17 @@ in CI to catch stale history. For stable hook declarations, pass
 `--hooks-file schemaforge/hooks.json` to both commands. The file contains a
 JSON array such as `[ { "from": 1, "to": 2, "phase": "beforePlan" } ]`; CI
 reads it automatically when artifact directories are present.
+
+For a long-lived history, run `compact` after full `verify` to create a rolling
+pair of the latest two schema checkpoints. It also adds content fingerprints
+to the manifest while preserving all transition chunks. Then use `advance` for
+each adjacent release; it validates the current pair, appends one immutable
+plan chunk, updates the manifest, and rotates the pair. `verify
+--checkpoints <directory> --migrations <directory>` checks every retained
+chunk and recompiles the newest transition from the rolling pair. Once this
+passes, older full snapshots can be removed without dropping old migration
+paths, as long as their compiled chunks remain. Checkpoint files are for
+development and CI, not runtime assets.
 
 At runtime, supply a lazy loader. For a plain Dart application, a loader can
 read its bundled files:

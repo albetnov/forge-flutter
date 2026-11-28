@@ -128,20 +128,35 @@ jobs:
         if: matrix.package == 'sqlite_schema_forge'
         working-directory: packages/sqlite_schema_forge
         run: |
+          snapshots="build/precomputed-history/snapshots"
           dart run sqlite_schema_forge:snapshot capture \
             --entry example/precomputed_history/snapshot_v1.dart \
-            --out example/precomputed_history/snapshots/0001.json
+            --out "$snapshots/0001.json"
           dart run sqlite_schema_forge:snapshot capture \
             --entry example/precomputed_history/snapshot_v2.dart \
-            --out example/precomputed_history/snapshots/0002.json
+            --out "$snapshots/0002.json"
           dart run sqlite_schema_forge:snapshot compile \
-            --snapshots example/precomputed_history/snapshots \
+            --snapshots "$snapshots" \
             --out build/precomputed-history/migrations \
             --hooks-file example/precomputed_history/hooks.json
           dart run sqlite_schema_forge:snapshot verify \
-            --snapshots example/precomputed_history/snapshots \
+            --snapshots "$snapshots" \
             --migrations build/precomputed-history/migrations \
             --hooks-file example/precomputed_history/hooks.json
+          dart run sqlite_schema_forge:snapshot compact \
+            --snapshots "$snapshots" \
+            --migrations build/precomputed-history/migrations \
+            --out build/precomputed-history/checkpoints \
+            --hooks-file example/precomputed_history/hooks.json
+          rm -rf "$snapshots"
+          dart run sqlite_schema_forge:snapshot advance \
+            --entry example/precomputed_history/snapshot_v3.dart \
+            --checkpoints build/precomputed-history/checkpoints \
+            --migrations build/precomputed-history/migrations \
+            --hooks-file example/precomputed_history/hooks.json
+          dart run sqlite_schema_forge:snapshot verify \
+            --checkpoints build/precomputed-history/checkpoints \
+            --migrations build/precomputed-history/migrations
           dart run example/precomputed_history/run.dart
 
       # `dart analyze <package>` walks subdirectories, including standalone

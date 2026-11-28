@@ -443,7 +443,7 @@ const skillsCmd = `dart run skills@ get`;
           </figure>
           <h3>Precomputed migration history</h3>
           <p>
-            Runtime planning stays the default. The runnable precomputed history example under <code class="inline">example/precomputed_history</code> captures two schema versions, compiles bounded JSON plan chunks, verifies the artifacts, and runs an after-schema data backfill against in-memory SQLite. This stores metadata only; it generates no Dart migration code. Capture refuses to replace a conflicting released snapshot, and verification detects stale snapshots or artifacts without rewriting them.
+            Runtime planning stays the default. The runnable precomputed history example under <code class="inline">example/precomputed_history</code> compiles an initial history, compacts it to two rolling schema checkpoints, then appends a v3 transition without reading older snapshots. It verifies the retained artifact chain and runs the v1 database through to v3 against in-memory SQLite. This stores metadata only; it generates no Dart migration code.
           </p>
           <figure class="code">
             <figcaption><span>end-to-end workflow</span></figcaption>
@@ -451,6 +451,9 @@ const skillsCmd = `dart run skills@ get`;
 dart run sqlite_schema_forge:snapshot capture --entry example/precomputed_history/snapshot_v2.dart --out example/precomputed_history/snapshots/0002.json
 dart run sqlite_schema_forge:snapshot compile --snapshots example/precomputed_history/snapshots --out build/precomputed-history/migrations --hooks-file example/precomputed_history/hooks.json
 dart run sqlite_schema_forge:snapshot verify --snapshots example/precomputed_history/snapshots --migrations build/precomputed-history/migrations --hooks-file example/precomputed_history/hooks.json
+dart run sqlite_schema_forge:snapshot compact --snapshots example/precomputed_history/snapshots --migrations build/precomputed-history/migrations --out build/precomputed-history/checkpoints --hooks-file example/precomputed_history/hooks.json
+dart run sqlite_schema_forge:snapshot advance --entry example/precomputed_history/snapshot_v3.dart --checkpoints build/precomputed-history/checkpoints --migrations build/precomputed-history/migrations --hooks-file example/precomputed_history/hooks.json
+dart run sqlite_schema_forge:snapshot verify --checkpoints build/precomputed-history/checkpoints --migrations build/precomputed-history/migrations
 dart run example/precomputed_history/run.dart`}</code></pre>
           </figure>
           <p>

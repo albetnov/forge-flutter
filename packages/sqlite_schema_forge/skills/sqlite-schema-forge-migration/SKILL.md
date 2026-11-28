@@ -72,6 +72,21 @@ for data transitions and keep the same flags in CI verification. For CI, keep
 these declarations in `schemaforge/hooks.json` as records with `from`, `to`,
 and `phase`; the workflow passes that file to verification automatically.
 
+To stop retaining every full schema snapshot, first verify and compact a full
+history into a rolling two-version checkpoint pair:
+
+```sh
+dart run sqlite_schema_forge:snapshot compact --snapshots schemaforge/snapshots --migrations schemaforge/migrations --out schemaforge/checkpoints --hooks-file schemaforge/hooks.json
+dart run sqlite_schema_forge:snapshot advance --entry tool/schema_v31.dart --checkpoints schemaforge/checkpoints --migrations schemaforge/migrations --hooks-file schemaforge/hooks.json
+dart run sqlite_schema_forge:snapshot verify --checkpoints schemaforge/checkpoints --migrations schemaforge/migrations
+```
+
+`advance` adds exactly one adjacent transition and keeps older migration
+chunks, so existing databases remain supported. It needs only the latest two
+schema checkpoints; older full snapshots can be pruned after verification.
+Keep the manifest and every transition chunk needed by the oldest supported
+database version. Checkpoints are build-time inputs and are not app assets.
+
 At runtime, pass `migrationHistory: MigrationArtifactStore(loader)` to
 `migrateWithUpgrades()`. Implement `MigrationArtifactLoader` in the host app:
 plain Dart can read files and Flutter can use `rootBundle.loadString` plus app

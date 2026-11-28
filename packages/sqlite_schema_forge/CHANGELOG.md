@@ -8,6 +8,10 @@
   compiled and validated JSON plan chunks, lazy artifact loading, and the
   `snapshot` capture/compile/verify CLI. Existing runtime planning remains the
   default; explicitly supplied invalid history fails closed.
+- Add incremental artifact generation with `snapshot compact` and `snapshot
+  advance`. Keep compiled transition chunks as the durable history and retain
+  only the latest two full schema checkpoints; incremental verification checks
+  chunk fingerprints and rebuilds the newest transition.
 - Define `beforePlan` and `afterPlan` hook boundaries for precomputed history.
   Fresh databases create the target schema directly without resolving
   historical artifacts or hooks.

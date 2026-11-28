@@ -19,7 +19,7 @@ Future<void> main() async {
     );
     await SqliteSchemaForge.migrateWithUpgrades(
       db: db,
-      targetSchema: schemaV2,
+      targetSchema: schemaV3,
       migrationHistory: history,
       upgrades: [
         Upgrade.from(1).to(

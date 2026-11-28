@@ -70,11 +70,18 @@ final class MigrationChunkRecord {
   /// Relative artifact file path.
   final String file;
 
+  /// FNV-1a fingerprint of canonical chunk JSON, when present.
+  ///
+  /// This detects accidental artifact drift; it is not an authenticity
+  /// signature. Older manifests may omit it and are upgraded by compaction.
+  final String? contentFingerprint;
+
   /// Creates a chunk index entry.
   const MigrationChunkRecord({
     required this.firstTargetVersion,
     required this.lastTargetVersion,
     required this.file,
+    this.contentFingerprint,
   });
 }
 
@@ -130,6 +137,8 @@ final class MigrationManifest {
           'firstTargetVersion': chunk.firstTargetVersion,
           'lastTargetVersion': chunk.lastTargetVersion,
           'file': chunk.file,
+          if (chunk.contentFingerprint != null)
+            'contentFingerprint': chunk.contentFingerprint,
         },
     ],
     'transitions': [
@@ -179,6 +188,10 @@ final class MigrationManifest {
           'chunk.lastTargetVersion',
         ),
         file: _string(m['file'], 'chunk.file'),
+        contentFingerprint: _optionalString(
+          m['contentFingerprint'],
+          'chunk.contentFingerprint',
+        ),
       );
     }).toList();
     final transitions = _list(root['transitions'], 'transitions')
@@ -276,6 +289,13 @@ final class MigrationManifest {
           chunk.file == '.' ||
           chunk.file == '..') {
         throw FormatException('Invalid migration chunk entry "${chunk.file}".');
+      }
+      if (chunk.contentFingerprint != null &&
+          !RegExp(r'^fnv1a64:[0-9a-f]{16}$')
+              .hasMatch(chunk.contentFingerprint!)) {
+        throw FormatException(
+          'Invalid content fingerprint for migration chunk "${chunk.file}".',
+        );
       }
       if (chunk.lastTargetVersion - chunk.firstTargetVersion + 1 > 10) {
         throw FormatException(
@@ -461,6 +481,35 @@ final class MigrationArtifactBundle {
     return bundle;
   }
 
+  /// Adds content fingerprints to a validated legacy bundle without changing
+  /// its transition records or plan chunks.
+  factory MigrationArtifactBundle.withChunkFingerprints(
+    MigrationArtifactBundle existing,
+  ) {
+    existing.validate();
+    final chunks = [
+      for (final record in existing.manifest.chunks)
+        MigrationChunkRecord(
+          firstTargetVersion: record.firstTargetVersion,
+          lastTargetVersion: record.lastTargetVersion,
+          file: record.file,
+          contentFingerprint: _artifactFingerprint(
+            MigrationPlanChunk.decode(existing.chunkFiles[record.file]!)
+                .encode(),
+          ),
+        ),
+    ];
+    return MigrationArtifactBundle.fromAssets(
+      manifest: MigrationManifest(
+        latestVersion: existing.manifest.latestVersion,
+        supportedStartingVersions: existing.manifest.supportedStartingVersions,
+        chunks: chunks,
+        transitions: existing.manifest.transitions,
+      ),
+      chunkFiles: existing.chunkFiles,
+    );
+  }
+
   /// Builds deterministic manifest and chunks from already compiled plans.
   ///
   /// Hook requirements and lifecycle boundaries are explicit inputs. Optional
@@ -533,12 +582,14 @@ final class MigrationArtifactBundle {
       final name =
           '${chunk.firstTargetVersion.toString().padLeft(4, '0')}-'
           '${chunk.lastTargetVersion.toString().padLeft(4, '0')}.json';
-      files[name] = chunk.encode();
+      final chunkSource = chunk.encode();
+      files[name] = chunkSource;
       chunkRecords.add(
         MigrationChunkRecord(
           firstTargetVersion: chunk.firstTargetVersion,
           lastTargetVersion: chunk.lastTargetVersion,
           file: name,
+          contentFingerprint: _artifactFingerprint(chunkSource),
         ),
       );
     }
@@ -553,6 +604,89 @@ final class MigrationArtifactBundle {
     return bundle;
   }
 
+  /// Appends one adjacent transition without rewriting existing chunks.
+  factory MigrationArtifactBundle.append({
+    required MigrationArtifactBundle existing,
+    required MigrationPlan plan,
+    required String fromFingerprint,
+    required String toFingerprint,
+    MigrationHookMetadata? hook,
+  }) {
+    existing.validate();
+    final manifest = existing.manifest;
+    if (manifest.chunks.any((chunk) => chunk.contentFingerprint == null)) {
+      throw StateError(
+        'Migration history has chunks without content fingerprints. '
+        'Run full verification and compact the history before appending.',
+      );
+    }
+    if (plan.fromVersion != manifest.latestVersion ||
+        plan.toVersion != manifest.latestVersion + 1) {
+      throw ArgumentError(
+        'Incremental plan must advance latest version '
+        '${manifest.latestVersion} by exactly one; got '
+        '${plan.fromVersion}->${plan.toVersion}.',
+      );
+    }
+    final latestTransition = manifest.transitions.last;
+    if (latestTransition.toFingerprint == null) {
+      throw StateError(
+        'The latest migration transition has no destination fingerprint. '
+        'Run full verification and compact the history before appending.',
+      );
+    }
+    if (latestTransition.toFingerprint != fromFingerprint) {
+      throw StateError(
+        'Checkpoint fingerprint for version ${plan.fromVersion} does not '
+        'match the latest migration artifact.',
+      );
+    }
+
+    final nextChunk = MigrationPlanChunk([plan]);
+    final chunkName =
+        '${nextChunk.firstTargetVersion.toString().padLeft(4, '0')}-'
+        '${nextChunk.lastTargetVersion.toString().padLeft(4, '0')}.json';
+    if (existing.chunkFiles.containsKey(chunkName) ||
+        manifest.chunks.any((chunk) => chunk.file == chunkName)) {
+      throw StateError('Migration chunk "$chunkName" already exists.');
+    }
+    final chunkSource = nextChunk.encode();
+    final transition = MigrationTransitionRecord(
+      fromVersion: plan.fromVersion,
+      toVersion: plan.toVersion,
+      destructive: plan.hasDestructiveChanges,
+      requiresHook: plan.hasDestructiveChanges || hook != null,
+      hookPhase:
+          hook?.phase ??
+          (plan.hasDestructiveChanges ? MigrationHookPhase.beforePlan : null),
+      fromFingerprint: fromFingerprint,
+      toFingerprint: toFingerprint,
+    );
+    final nextManifest = MigrationManifest(
+      latestVersion: plan.toVersion,
+      supportedStartingVersions: {
+        ...manifest.supportedStartingVersions,
+        plan.fromVersion,
+      }.toList(),
+      chunks: [
+        ...manifest.chunks,
+        MigrationChunkRecord(
+          firstTargetVersion: nextChunk.firstTargetVersion,
+          lastTargetVersion: nextChunk.lastTargetVersion,
+          file: chunkName,
+          contentFingerprint: _artifactFingerprint(chunkSource),
+        ),
+      ],
+      transitions: [...manifest.transitions, transition],
+    );
+    final bundle = MigrationArtifactBundle._(nextManifest, {
+      ...existing.chunkFiles,
+      chunkName: chunkSource,
+    });
+    bundle.validate();
+    return bundle;
+  }
+
   /// Validates that all indexed files exist and agree with manifest metadata.
   void validate() {
     final seen = <(int, int)>{};
@@ -562,6 +696,12 @@ final class MigrationArtifactBundle {
         throw FormatException('Migration chunk "${record.file}" is missing.');
       }
       final chunk = MigrationPlanChunk.decode(source);
+      if (record.contentFingerprint != null &&
+          record.contentFingerprint != _artifactFingerprint(chunk.encode())) {
+        throw FormatException(
+          'Migration chunk "${record.file}" content fingerprint mismatch.',
+        );
+      }
       if (chunk.firstTargetVersion != record.firstTargetVersion ||
           chunk.lastTargetVersion != record.lastTargetVersion) {
         throw FormatException(
@@ -717,6 +857,12 @@ final class MigrationArtifactStore {
         );
       }
       final chunk = MigrationPlanChunk.decode(chunkSource);
+      if (record.contentFingerprint != null &&
+          record.contentFingerprint != _artifactFingerprint(chunk.encode())) {
+        throw FormatException(
+          'Migration chunk "${record.file}" content fingerprint mismatch.',
+        );
+      }
       if (chunk.firstTargetVersion != record.firstTargetVersion ||
           chunk.lastTargetVersion != record.lastTargetVersion) {
         throw FormatException(
@@ -766,4 +912,14 @@ final class MigrationArtifactStore {
       toVersion: toVersion,
     );
   }
+}
+
+String _artifactFingerprint(String source) {
+  var hash = BigInt.parse('cbf29ce484222325', radix: 16);
+  final prime = BigInt.parse('100000001b3', radix: 16);
+  final mask = BigInt.parse('ffffffffffffffff', radix: 16);
+  for (final byte in utf8.encode(source)) {
+    hash = (hash ^ BigInt.from(byte)) * prime & mask;
+  }
+  return 'fnv1a64:${hash.toRadixString(16).padLeft(16, '0')}';
 }

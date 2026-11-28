@@ -49,6 +49,12 @@ void main() {
         expect(bundle.manifest.latestVersion, 24);
         expect(bundle.manifest.supportedStartingVersions.first, 1);
         expect(bundle.manifest.supportedStartingVersions.last, 23);
+        expect(
+          bundle.manifest.chunks.every(
+            (chunk) => chunk.contentFingerprint != null,
+          ),
+          isTrue,
+        );
         expect(bundle.manifest.transitions[3].destructive, isTrue);
         expect(bundle.manifest.transitions[2].fromFingerprint, 'fp-3');
         expect(bundle.manifest.transitions[2].toFingerprint, 'fp-4');
@@ -102,6 +108,121 @@ void main() {
         );
       },
     );
+
+    test('append preserves old chunks and extends supported starts', () {
+      final initial = MigrationArtifactBundle.build(
+        plans: [_plan(1)],
+        schemaFingerprints: {1: 'fp-1', 2: 'fp-2'},
+      );
+      final next = MigrationArtifactBundle.append(
+        existing: initial,
+        plan: _plan(2, destructive: true),
+        fromFingerprint: 'fp-2',
+        toFingerprint: 'fp-3',
+      );
+
+      expect(next.manifest.latestVersion, 3);
+      expect(next.manifest.supportedStartingVersions, [1, 2]);
+      expect(
+        next.manifest.transitions.map((t) => (t.fromVersion, t.toVersion)),
+        [(1, 2), (2, 3)],
+      );
+      expect(next.manifest.transitions.last.requiresHook, isTrue);
+      expect(
+        next.manifest.transitions.last.hookPhase,
+        MigrationHookPhase.beforePlan,
+      );
+      expect(
+        next.chunkFiles['0002-0002.json'],
+        initial.chunkFiles['0002-0002.json'],
+      );
+      expect(next.chunkFiles.keys, contains('0003-0003.json'));
+      expect(
+        next.manifest.chunks.every((chunk) => chunk.contentFingerprint != null),
+        isTrue,
+      );
+    });
+
+    test(
+      'append rejects gaps, checkpoint mismatch, and legacy fingerprints',
+      () {
+        final initial = MigrationArtifactBundle.build(
+          plans: [_plan(1)],
+          schemaFingerprints: {2: 'fp-2'},
+        );
+
+        expect(
+          () => MigrationArtifactBundle.append(
+            existing: initial,
+            plan: _plan(3),
+            fromFingerprint: 'fp-2',
+            toFingerprint: 'fp-4',
+          ),
+          throwsArgumentError,
+        );
+        expect(
+          () => MigrationArtifactBundle.append(
+            existing: initial,
+            plan: _plan(2),
+            fromFingerprint: 'wrong',
+            toFingerprint: 'fp-3',
+          ),
+          throwsStateError,
+        );
+
+        final legacyManifest = MigrationManifest(
+          latestVersion: initial.manifest.latestVersion,
+          supportedStartingVersions: initial.manifest.supportedStartingVersions,
+          chunks: [
+            for (final chunk in initial.manifest.chunks)
+              MigrationChunkRecord(
+                firstTargetVersion: chunk.firstTargetVersion,
+                lastTargetVersion: chunk.lastTargetVersion,
+                file: chunk.file,
+              ),
+          ],
+          transitions: initial.manifest.transitions,
+        );
+        final legacy = MigrationArtifactBundle.fromAssets(
+          manifest: legacyManifest,
+          chunkFiles: initial.chunkFiles,
+        );
+        final upgraded = MigrationArtifactBundle.withChunkFingerprints(legacy);
+        expect(
+          upgraded.manifest.chunks.every(
+            (chunk) => chunk.contentFingerprint != null,
+          ),
+          isTrue,
+        );
+        expect(upgraded.chunkFiles, legacy.chunkFiles);
+        expect(
+          () => MigrationArtifactBundle.append(
+            existing: legacy,
+            plan: _plan(2),
+            fromFingerprint: 'fp-2',
+            toFingerprint: 'fp-3',
+          ),
+          throwsStateError,
+        );
+      },
+    );
+
+    test('bundle validation detects chunk content drift', () {
+      final bundle = MigrationArtifactBundle.build(plans: [_plan(1)]);
+      final name = bundle.chunkFiles.keys.single;
+      final altered = bundle.chunkFiles[name]!.replaceFirst(
+        'Add name',
+        'Add title',
+      );
+
+      expect(
+        () => MigrationArtifactBundle.fromAssets(
+          manifest: bundle.manifest,
+          chunkFiles: {name: altered},
+        ),
+        throwsFormatException,
+      );
+    });
 
     test(
       'manifest and chunk validation reject incomplete or inconsistent assets',
@@ -207,6 +328,32 @@ void main() {
         throwsFormatException,
       );
     });
+
+    test(
+      'runtime loading rejects a chunk whose content fingerprint changed',
+      () async {
+        final bundle = MigrationArtifactBundle.build(plans: [_plan(1)]);
+        final name = bundle.chunkFiles.keys.single;
+        final altered = bundle.chunkFiles[name]!.replaceFirst(
+          'Add name',
+          'Add title',
+        );
+        final store = MigrationArtifactStore(
+          _MemoryArtifactLoader(bundle.manifest.encode(), {name: altered}),
+        );
+
+        await expectLater(
+          store.loadPath(fromVersion: 1, toVersion: 2),
+          throwsA(
+            isA<FormatException>().having(
+              (error) => error.message,
+              'message',
+              contains('fingerprint mismatch'),
+            ),
+          ),
+        );
+      },
+    );
 
     test('precomputed migration validates hooks then executes plans at declared boundaries', () async {
       final target = Schema(
