@@ -1,3 +1,8 @@
+## 0.4.4
+
+- Widen the `sqlite_schema_forge` dependency constraint to `^0.4.0`.
+  No query API change.
+
 ## 0.4.3
 
 - Widen the `sqlite_schema_forge` dependency constraint to `^0.3.0` for the

@@ -377,7 +377,7 @@ const skillsCmd = `dart run skills@ get`;
           raw CREATE TABLE strings.
         </p>
         <div class="meta">
-          <span class="ver">0.3.0</span>
+          <span class="ver">0.4.0</span>
           <a href="https://pub.dev/packages/sqlite_schema_forge">pub.dev</a>
           <a href="https://github.com/albetnov/forge-flutter/tree/main/packages/sqlite_schema_forge">README source</a>
         </div>
@@ -447,11 +447,11 @@ const skillsCmd = `dart run skills@ get`;
           </p>
           <figure class="code">
             <figcaption><span>end-to-end workflow</span></figcaption>
-            <pre><code>{`dart run sqlite_schema_forge:snapshot capture --entry example/precomputed_history/snapshot_v1.dart --out example/precomputed_history/snapshots/0001.json
-dart run sqlite_schema_forge:snapshot capture --entry example/precomputed_history/snapshot_v2.dart --out example/precomputed_history/snapshots/0002.json
-dart run sqlite_schema_forge:snapshot compile --snapshots example/precomputed_history/snapshots --out build/precomputed-history/migrations --hooks-file example/precomputed_history/hooks.json
-dart run sqlite_schema_forge:snapshot verify --snapshots example/precomputed_history/snapshots --migrations build/precomputed-history/migrations --hooks-file example/precomputed_history/hooks.json
-dart run sqlite_schema_forge:snapshot compact --snapshots example/precomputed_history/snapshots --migrations build/precomputed-history/migrations --out build/precomputed-history/checkpoints --hooks-file example/precomputed_history/hooks.json
+            <pre><code>{`dart run sqlite_schema_forge:snapshot capture --entry example/precomputed_history/snapshot_v1.dart --out build/precomputed-history/snapshots/0001.json
+dart run sqlite_schema_forge:snapshot capture --entry example/precomputed_history/snapshot_v2.dart --out build/precomputed-history/snapshots/0002.json
+dart run sqlite_schema_forge:snapshot compile --snapshots build/precomputed-history/snapshots --out build/precomputed-history/migrations --hooks-file example/precomputed_history/hooks.json
+dart run sqlite_schema_forge:snapshot verify --snapshots build/precomputed-history/snapshots --migrations build/precomputed-history/migrations --hooks-file example/precomputed_history/hooks.json
+dart run sqlite_schema_forge:snapshot compact --snapshots build/precomputed-history/snapshots --migrations build/precomputed-history/migrations --out build/precomputed-history/checkpoints --hooks-file example/precomputed_history/hooks.json
 dart run sqlite_schema_forge:snapshot advance --entry example/precomputed_history/snapshot_v3.dart --checkpoints build/precomputed-history/checkpoints --migrations build/precomputed-history/migrations --hooks-file example/precomputed_history/hooks.json
 dart run sqlite_schema_forge:snapshot verify --checkpoints build/precomputed-history/checkpoints --migrations build/precomputed-history/migrations
 dart run example/precomputed_history/run.dart`}</code></pre>
